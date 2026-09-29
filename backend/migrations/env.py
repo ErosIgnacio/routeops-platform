@@ -18,6 +18,15 @@ config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 target_metadata = Base.metadata
 
 
+def include_name(name: str | None, type_: str, parent_names: dict[str, str | None]) -> bool:
+    """Keep PostGIS-owned tables outside RouteOps autogeneration."""
+    if type_ == "schema":
+        return name is None
+    if type_ == "table":
+        return name in target_metadata.tables
+    return True
+
+
 def run_migrations_offline() -> None:
     context.configure(
         url=config.get_main_option("sqlalchemy.url"),
@@ -36,7 +45,9 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection, target_metadata=target_metadata, include_name=include_name
+        )
         with context.begin_transaction():
             context.run_migrations()
 

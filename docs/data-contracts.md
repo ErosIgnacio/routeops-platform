@@ -51,7 +51,7 @@ ambiguity checks for local operating times wait for scenario revisions.
 
 | Field | Type | Required | Validation |
 |---|---|---:|---|
-| `order_id` | identifier | yes | Unique in scenario |
+| `order_id` | identifier | yes | Unique in import package and published revision |
 | `customer_reference` | string ≤ 200 | yes | Synthetic/non-sensitive label |
 | `latitude` | coordinate | yes | Valid point |
 | `longitude` | coordinate | yes | Valid point |
@@ -61,9 +61,10 @@ ambiguity checks for local operating times wait for scenario revisions.
 | `service_minutes` | integer | yes | `1..1440` |
 | `required_skills` | skills | no | Normalized lower-case slugs |
 
-Invalid global coordinates are errors now. Coordinates outside a configured
-Santiago/RM envelope will produce a warning, not an automatic correction, once
-a scenario revision supplies that envelope.
+Invalid global coordinates are errors now. An optional operational area in a
+scenario revision uses `MultiPolygon`/SRID 4326. Points on its boundary are
+inside; points outside produce a warning, not an automatic correction. With no
+area configured, no territorial validation runs.
 
 ## Order lines
 
@@ -98,7 +99,7 @@ Missing center/SKU rows mean zero available stock; they are not synthesized.
 
 | Field | Type | Required | Validation |
 |---|---|---:|---|
-| `distribution_center_id` | identifier | yes | Unique in scenario |
+| `distribution_center_id` | identifier | yes | Unique in import package and published revision |
 | `name` | string ≤ 200 | yes | Non-blank |
 | `latitude` | coordinate | yes | Valid point |
 | `longitude` | coordinate | yes | Valid point |
@@ -109,7 +110,7 @@ Missing center/SKU rows mean zero available stock; they are not synthesized.
 
 | Field | Type | Required | Validation |
 |---|---|---:|---|
-| `vehicle_id` | identifier | yes | Unique in scenario |
+| `vehicle_id` | identifier | yes | Unique in import package and published revision |
 | `distribution_center_id` | identifier | yes | Must reference a center |
 | `vehicle_type` | identifier | yes | Stable type label |
 | `capacity_units` | integer | yes | `> 0` |
