@@ -1,0 +1,153 @@
+{
+  "dataset": {
+    "name": "routeops-santiago-demo",
+    "synthetic": true,
+    "seed": 20260924,
+    "notice": "All order locations and references are fictional portfolio data."
+  },
+  "scenario": {
+    "name": "Santiago synthetic morning plan",
+    "timezone": "America/Santiago",
+    "currency": "CLP",
+    "planning_horizon_start": "2026-10-15T08:00:00-03:00",
+    "planning_horizon_end": "2026-10-15T18:00:00-03:00"
+  },
+  "distribution_centers": [
+    {
+      "id": "DC-CENTRO",
+      "name": "Centro Demo Poniente",
+      "latitude": -33.4445,
+      "longitude": -70.6635
+    },
+    {
+      "id": "DC-ORIENTE",
+      "name": "Centro Demo Oriente",
+      "latitude": -33.4380,
+      "longitude": -70.6380
+    }
+  ],
+  "inventory": [
+    {"distribution_center_id": "DC-CENTRO", "sku": "SKU-A", "on_hand": 50, "reserved": 5, "safety_stock": 10},
+    {"distribution_center_id": "DC-CENTRO", "sku": "SKU-B", "on_hand": 15, "reserved": 5, "safety_stock": 5},
+    {"distribution_center_id": "DC-CENTRO", "sku": "SKU-C", "on_hand": 10, "reserved": 0, "safety_stock": 5},
+    {"distribution_center_id": "DC-ORIENTE", "sku": "SKU-A", "on_hand": 30, "reserved": 5, "safety_stock": 5},
+    {"distribution_center_id": "DC-ORIENTE", "sku": "SKU-B", "on_hand": 40, "reserved": 5, "safety_stock": 5},
+    {"distribution_center_id": "DC-ORIENTE", "sku": "SKU-C", "on_hand": 10, "reserved": 0, "safety_stock": 5}
+  ],
+  "vehicles": [
+    {
+      "id": "VEH-CENTRO-01",
+      "distribution_center_id": "DC-CENTRO",
+      "vehicle_type": "van",
+      "capacity_units": 50,
+      "capacity_weight_kg": "500",
+      "capacity_volume_m3": "3",
+      "shift_start": "2026-10-15T08:00:00-03:00",
+      "shift_end": "2026-10-15T18:00:00-03:00",
+      "skills": ["fragile"],
+      "fixed_cost": "18000",
+      "cost_per_hour": "6500",
+      "cost_per_km": "420"
+    },
+    {
+      "id": "VEH-CENTRO-02",
+      "distribution_center_id": "DC-CENTRO",
+      "vehicle_type": "compact-van",
+      "capacity_units": 25,
+      "capacity_weight_kg": "200",
+      "capacity_volume_m3": "1",
+      "shift_start": "2026-10-15T08:30:00-03:00",
+      "shift_end": "2026-10-15T17:00:00-03:00",
+      "skills": [],
+      "fixed_cost": "12000",
+      "cost_per_hour": "5200",
+      "cost_per_km": "330"
+    },
+    {
+      "id": "VEH-ORIENTE-01",
+      "distribution_center_id": "DC-ORIENTE",
+      "vehicle_type": "refrigerated-van",
+      "capacity_units": 40,
+      "capacity_weight_kg": "300",
+      "capacity_volume_m3": "2",
+      "shift_start": "2026-10-15T08:00:00-03:00",
+      "shift_end": "2026-10-15T18:00:00-03:00",
+      "skills": ["refrigerated", "fragile"],
+      "fixed_cost": "24000",
+      "cost_per_hour": "7900",
+      "cost_per_km": "510"
+    }
+  ],
+  "orders": [
+    {
+      "id": "ORD-001",
+      "customer_reference": "SYNTH-CENTRO-01",
+      "latitude": -33.4420,
+      "longitude": -70.6580,
+      "priority": 90,
+      "time_window_start": "2026-10-15T09:00:00-03:00",
+      "time_window_end": "2026-10-15T12:00:00-03:00",
+      "service_minutes": 12,
+      "required_skills": ["fragile"],
+      "lines": [
+        {"sku": "SKU-A", "quantity": 6, "unit_weight_kg": "1.2", "unit_volume_m3": "0.004"}
+      ]
+    },
+    {
+      "id": "ORD-002",
+      "customer_reference": "SYNTH-ORIENTE-01",
+      "latitude": -33.4360,
+      "longitude": -70.6340,
+      "priority": 80,
+      "time_window_start": "2026-10-15T09:30:00-03:00",
+      "time_window_end": "2026-10-15T13:00:00-03:00",
+      "service_minutes": 15,
+      "required_skills": ["refrigerated"],
+      "lines": [
+        {"sku": "SKU-B", "quantity": 8, "unit_weight_kg": "0.5", "unit_volume_m3": "0.002"}
+      ]
+    },
+    {
+      "id": "ORD-003",
+      "customer_reference": "SYNTH-NO-STOCK",
+      "latitude": -33.4480,
+      "longitude": -70.6480,
+      "priority": 70,
+      "time_window_start": "2026-10-15T10:00:00-03:00",
+      "time_window_end": "2026-10-15T14:00:00-03:00",
+      "service_minutes": 10,
+      "required_skills": [],
+      "lines": [
+        {"sku": "SKU-C", "quantity": 20, "unit_weight_kg": "1", "unit_volume_m3": "0.003"}
+      ]
+    },
+    {
+      "id": "ORD-004",
+      "customer_reference": "SYNTH-CENTRO-02",
+      "latitude": -33.4510,
+      "longitude": -70.6670,
+      "priority": 60,
+      "time_window_start": "2026-10-15T11:00:00-03:00",
+      "time_window_end": "2026-10-15T16:00:00-03:00",
+      "service_minutes": 8,
+      "required_skills": [],
+      "lines": [
+        {"sku": "SKU-A", "quantity": 3, "unit_weight_kg": "2", "unit_volume_m3": "0.006"}
+      ]
+    },
+    {
+      "id": "ORD-005",
+      "customer_reference": "SYNTH-ORIENTE-02",
+      "latitude": -33.4305,
+      "longitude": -70.6420,
+      "priority": 50,
+      "time_window_start": "2026-10-15T12:00:00-03:00",
+      "time_window_end": "2026-10-15T16:30:00-03:00",
+      "service_minutes": 10,
+      "required_skills": ["refrigerated"],
+      "lines": [
+        {"sku": "SKU-B", "quantity": 5, "unit_weight_kg": "0.8", "unit_volume_m3": "0.003"}
+      ]
+    }
+  ]
+}

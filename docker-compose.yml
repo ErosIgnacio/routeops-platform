@@ -1,0 +1,111 @@
+name: routeops
+
+services:
+  database:
+    image: postgis/postgis:18-3.6@sha256:7e00e8c3539fdd43f513b98806c8204714dcd09dea683c259e333d7690317119
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-routeops}
+      POSTGRES_USER: ${POSTGRES_USER:-routeops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  osrm-prepare:
+    image: ghcr.io/project-osrm/osrm-backend:26.9.0-debian@sha256:8a1b1bc938412f15f9b5b32d794c4ec6bf4a85dfbbabfa0a014b70b187edb53b
+    profiles: ["tools"]
+    volumes:
+      - ./data/osrm:/data
+    entrypoint: ["/bin/sh", "/scripts/prepare-osrm.sh"]
+    command: ["/data/santiago-demo.osm"]
+    configs:
+      - source: prepare_osrm
+        target: /scripts/prepare-osrm.sh
+
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:26.9.0-debian@sha256:8a1b1bc938412f15f9b5b32d794c4ec6bf4a85dfbbabfa0a014b70b187edb53b
+    command:
+      - osrm-routed
+      - --algorithm
+      - mld
+      - --max-table-size
+      - "1000"
+      - --max-viaroute-size
+      - "1000"
+      - /data/santiago-demo.osrm
+    volumes:
+      - ./data/osrm:/data:ro
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+
+  vroom:
+    image: ghcr.io/vroom-project/vroom-docker:v1.15.0@sha256:247d5683d6745c755d718a156d16b16aac80baccc276a003a68b986c13883b08
+    environment:
+      VROOM_ROUTER: osrm
+      VROOM_LOG: /tmp
+    volumes:
+      - ./infrastructure/vroom/config.yml:/conf/config.yml:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - osrm
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:3000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      ROUTEOPS_ENV: ${ROUTEOPS_ENV:-development}
+      ROUTEOPS_LOG_LEVEL: ${ROUTEOPS_LOG_LEVEL:-INFO}
+      ROUTEOPS_DATABASE_URL: ${ROUTEOPS_DATABASE_URL:?Set ROUTEOPS_DATABASE_URL in .env}
+      ROUTEOPS_VROOM_URL: ${ROUTEOPS_VROOM_URL:-http://vroom:3000}
+      ROUTEOPS_OSRM_URL: ${ROUTEOPS_OSRM_URL:-http://osrm:5000}
+      ROUTEOPS_SOLVER_TIMEOUT_SECONDS: ${ROUTEOPS_SOLVER_TIMEOUT_SECONDS:-15}
+      ROUTEOPS_HTTP_CONNECT_TIMEOUT_SECONDS: ${ROUTEOPS_HTTP_CONNECT_TIMEOUT_SECONDS:-2}
+      ROUTEOPS_HTTP_READ_TIMEOUT_SECONDS: ${ROUTEOPS_HTTP_READ_TIMEOUT_SECONDS:-20}
+      ROUTEOPS_CORS_ORIGINS: ${ROUTEOPS_CORS_ORIGINS:-http://localhost:5173}
+      ROUTEOPS_MAP_DATASET_SHA256: ${ROUTEOPS_MAP_DATASET_SHA256:-22230c1c093a0fe50bbb240cce3d2c36aaf34e8bfb2fe136b76405084de213c4}
+    command:
+      - /bin/sh
+      - -ec
+      - alembic upgrade head && uvicorn routeops.api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      database:
+        condition: service_healthy
+      vroom:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      BACKEND_PROXY_TARGET: http://backend:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+configs:
+  prepare_osrm:
+    file: ./infrastructure/osrm/prepare-osrm.sh
+
+volumes:
+  postgres-data:

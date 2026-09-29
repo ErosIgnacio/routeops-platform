@@ -1,0 +1,17 @@
+{
+  "dataset": "santiago-demo.osm",
+  "source": "OpenStreetMap via Overpass API",
+  "endpoint": "https://overpass.private.coffee/api/interpreter",
+  "query": "[out:xml][timeout:120];(way[\"highway\"](-33.4550,-70.6750,-33.4250,-70.6250);>;);out body qt;",
+  "bounding_box": {
+    "south": -33.4550,
+    "west": -70.6750,
+    "north": -33.4250,
+    "east": -70.6250
+  },
+  "downloaded_at_utc": "2026-09-24T13:19:55.9447884Z",
+  "bytes": 4145215,
+  "sha256": "22230c1c093a0fe50bbb240cce3d2c36aaf34e8bfb2fe136b76405084de213c4",
+  "license": "ODbL-1.0",
+  "attribution": "Data © OpenStreetMap contributors"
+}

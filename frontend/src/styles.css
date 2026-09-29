@@ -1,0 +1,213 @@
+:root {
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 80% -15%, rgba(35, 109, 132, 0.2), transparent 42%),
+    #08111f;
+}
+
+.shell {
+  min-height: 100vh;
+}
+
+.topbar {
+  height: 72px;
+  padding: 0 4vw;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(148, 169, 194, 0.12);
+  background: rgba(8, 17, 31, 0.86);
+  backdrop-filter: blur(18px);
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #07111e;
+  background: linear-gradient(145deg, #48e6b7, #33a7d6);
+  font-weight: 900;
+  box-shadow: 0 0 28px rgba(51, 214, 166, 0.2);
+}
+
+.content {
+  width: min(1500px, 94vw);
+  margin: 0 auto;
+  padding: 42px 0 24px;
+}
+
+.headline {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 30px;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.kpi-card {
+  padding: 20px;
+  min-height: 134px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: linear-gradient(145deg, rgba(18, 34, 52, 0.96), rgba(13, 27, 43, 0.96)) !important;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2.15fr) minmax(310px, 0.85fr);
+  gap: 18px;
+}
+
+.map-panel,
+.side-panel {
+  overflow: hidden;
+  background: rgba(14, 28, 45, 0.94) !important;
+}
+
+.panel-heading {
+  min-height: 68px;
+  padding: 15px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.route-map {
+  height: 590px;
+  width: 100%;
+  border-top: 1px solid rgba(148, 169, 194, 0.12);
+  background: #13243a;
+}
+
+.maplibregl-ctrl-group {
+  background: #101d2d !important;
+}
+
+.maplibregl-ctrl button .maplibregl-ctrl-icon {
+  filter: invert(1);
+}
+
+.maplibregl-ctrl-attrib {
+  background: rgba(8, 17, 31, 0.82) !important;
+  color: #91a4ba !important;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: #b7c7d8 !important;
+}
+
+.scroll-list {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.scroll-list.compact {
+  max-height: 255px;
+}
+
+.route-row {
+  min-height: 72px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(148, 169, 194, 0.1);
+}
+
+.route-row-button {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  justify-content: flex-start;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.route-row-button:hover {
+  background: rgba(148, 169, 194, 0.08);
+}
+
+.route-row-selected {
+  background: rgba(94, 165, 255, 0.12);
+  box-shadow: inset 3px 0 0 #eef6ff;
+}
+
+.route-dot {
+  width: 9px;
+  height: 38px;
+  border-radius: 99px;
+  flex: 0 0 auto;
+}
+
+.map-debug {
+  padding: 14px 16px;
+  border-top: 2px solid #ffb454;
+  background: #050b14;
+  color: #eef6ff;
+  font: 12px/1.45 Consolas, "Courier New", monospace;
+}
+
+.map-debug pre {
+  max-height: 430px;
+  margin: 10px 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.exception-row {
+  padding: 15px 17px;
+  border-bottom: 1px solid rgba(148, 169, 194, 0.1);
+}
+
+.empty-state {
+  padding: 32px 18px;
+  text-align: center;
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 4px 0;
+}
+
+@media (max-width: 1100px) {
+  .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .workspace-grid { grid-template-columns: 1fr; }
+  .route-map { height: 520px; }
+}
+
+@media (max-width: 680px) {
+  .topbar { padding: 0 18px; }
+  .topbar .MuiStack-root:last-child { display: none; }
+  .content { width: min(92vw, 560px); padding-top: 28px; }
+  .headline { align-items: flex-start; flex-direction: column; }
+  .headline .MuiStack-root { align-items: flex-start; }
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi-card { min-height: 122px; padding: 16px; }
+  .route-map { height: 430px; }
+  .footer { flex-direction: column; }
+}
