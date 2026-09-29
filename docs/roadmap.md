@@ -57,6 +57,20 @@ Acceptance criteria:
 
 ## Milestone 2 — data and inventory
 
+Approved delivery sequence (2026-09-28):
+
+1. **2.1:** input contracts, reproducible templates, and bounded validation.
+2. **2.2:** persistent model, migrations, and immutable scenario/import revisions.
+3. **2.3:** provisional upload, error report, atomic publication, and interface.
+4. **2.4:** deterministic center assignment and transactional RouteOps reservations.
+5. **2.5:** execution, history, run interface, and measured VROOM workload limit.
+6. **2.6:** integrated acceptance, concurrency, and recovery tests.
+
+See [the 2.1 contract](milestone-2-1-import-validation.md). Processing runs
+stale for more than a configurable 30 minutes will be recovered idempotently
+in a later delivery; ready-for-review runs and committed reservations do not
+expire automatically. No such recovery is part of 2.1.
+
 Deliverables:
 
 - Downloadable CSV/`.xlsx` templates and secure upload pipeline.

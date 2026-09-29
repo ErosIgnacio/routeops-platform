@@ -12,7 +12,12 @@ types will be fixed in the first Alembic migration.
 - `id` UUID, `name`, `planning_date`, `timezone`, `currency`
 - `status` and optimistic `version`
 - `created_at`, `updated_at` in UTC
-- source import package and zero or more immutable planning runs
+- zero or more immutable `ScenarioRevision` records, each referencing its
+  source import package and zero or more immutable planning runs
+
+A new import creates a new scenario revision. Neither imported data nor a
+revision used by a run is overwritten; a run retains the revision, import,
+inventory snapshot, rules, and dependency versions needed for reconstruction.
 
 ### Imported planning data
 
@@ -33,8 +38,10 @@ validation.
 
 ### Inventory and reservations
 
-- `InventoryPosition`: current center/SKU quantities (`on_hand`, `reserved`,
-  `safety_stock`) and a concurrency version; unique on center/SKU.
+- `InventoryPosition`: current center/SKU quantities (`on_hand`,
+  `externally_reserved`, `routeops_reserved`, `safety_stock`) and a concurrency
+  version; unique on center/SKU. RouteOps never releases an imported external
+  reservation.
 - `InventorySnapshot`: immutable header with `snapshot_at`, `created_at`, source
   import hash, and scenario/run relationship.
 - `InventorySnapshotLine`: copied quantities and computed availability for each
@@ -43,6 +50,14 @@ validation.
   and status.
 - `InventoryReservation`: order line, inventory position, quantity, state
   (`HELD`, `COMMITTED`, `RELEASED`), idempotency key, and timestamps.
+
+External reservations imported from inventory are separate from the RouteOps
+reservation ledger. A run failure or cancellation may release only its own
+`HELD` ledger rows. Later recovery may fail a run that has remained in
+processing without a heartbeat for more than a configurable 30 minutes and
+transactionally release those rows. A run ready for review has no automatic
+expiry, and `COMMITTED` reservations are never released by recovery. Every
+transition and release is audited. This is not implemented in delivery 2.1.
 
 Quantities use exact numeric/integer storage and checks preventing negatives.
 The database enforces one active allocation per order and one reservation per
@@ -69,11 +84,12 @@ transaction performs the consistency-critical work:
 
 1. Lock relevant `InventoryPosition` rows in stable center/SKU order with
    `SELECT ... FOR UPDATE` to avoid deadlocks.
-2. Recompute `available = on_hand - reserved - safety_stock` from locked rows.
+2. Recompute availability from locked rows, subtracting external reservations,
+   RouteOps reservations, and safety stock from stock on hand.
 3. Create the immutable snapshot and lines.
 4. Process orders in the deterministic allocation order.
 5. For the selected center, insert idempotent `HELD` reservations and increment
-   `InventoryPosition.reserved` atomically.
+   `InventoryPosition.routeops_reserved` atomically.
 6. Persist allocation decisions and their scoring evidence.
 7. Commit once; on any error, roll back snapshot, allocations, reservations, and
    counters together.
@@ -83,12 +99,13 @@ network retry return the original outcome. A database check ensures:
 
 ```text
 on_hand >= 0
-reserved >= 0
+externally_reserved >= 0
+routeops_reserved >= 0
 safety_stock >= 0
-reserved + safety_stock <= on_hand
+externally_reserved + routeops_reserved + safety_stock <= on_hand
 ```
 
-Releasing a reservation locks the same positions, decrements `reserved`, marks
+Releasing a reservation locks the same positions, decrements `routeops_reserved`, marks
 the ledger rows `RELEASED`, and commits atomically. A committed plan does not
 silently release stock. v1 uses explicit accept/cancel transitions; automated
 expiry is deferred until a real operational requirement exists.

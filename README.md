@@ -75,6 +75,15 @@ Stop services without deleting the PostgreSQL volume:
 docker compose down
 ```
 
+## Milestone 2.1 import validation (pending review)
+
+The current branch adds a read-only validator and reproducible CSV/XLSX
+templates for five datasets. It does not publish imports or change the demo
+API. With the backend dependencies installed and `PYTHONPATH=backend/src`, run
+`python -m routeops.application.import_cli templates <directory>` or
+`python -m routeops.application.import_cli validate <five CSV paths or one XLSX path>`.
+See [the 2.1 contract and issue catalog](docs/milestone-2-1-import-validation.md).
+
 ## API
 
 | Method | Path | Purpose |

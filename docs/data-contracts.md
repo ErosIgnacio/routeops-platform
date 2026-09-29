@@ -4,23 +4,26 @@
 
 RouteOps accepts either five CSV files or one `.xlsx` workbook with worksheets
 named `orders`, `order_lines`, `inventory`, `distribution_centers`, and
-`vehicles`. Names are case-sensitive in v1. CSV is UTF-8 (a BOM is accepted),
+`vehicles`. Names are case-sensitive in v1. CSV filenames are exactly the
+dataset name plus `.csv`. CSV is UTF-8 (a BOM is accepted),
 comma-delimited, and includes one header row. `.xls` and macro-enabled Excel
 files are rejected.
 
-Imports are staged and validated as a package. No rows become planning data
-unless every required dataset is present and the package has zero `ERROR`
-issues. `WARNING` issues do not block publication.
+In the later publishing flow, imports will be staged and validated as a package.
+No rows will become planning data unless every required dataset is present and
+the package has zero `ERROR` issues. `WARNING` issues will not block publication.
 
-Proposed configurable safety defaults are 20 MiB per file, 100 MiB per package,
-five worksheets, 200 columns, and 250,000 rows per dataset. ZIP expansion and
-shared-string sizes for `.xlsx` are bounded separately to resist decompression
-bombs. Uploaded formulas and external links are rejected; values are never
-executed.
+Approved configurable safety defaults are 20 MiB per file, 100 MiB per package,
+five worksheets, 200 columns, and 250,000 rows per dataset. The default XLSX
+limits are 1,000,000 cells, 200 MiB total expanded ZIP size, 4 MiB workbook
+metadata, 32 MiB shared strings, 200 ZIP entries, and 100:1 compression ratio
+per entry. These limits
+belong to import validation; the operational VROOM run limit is a later decision.
+Uploaded formulas and external links are rejected; values are never executed.
 
 Blank strings normalize to null before required-field validation. Unknown
-columns are warnings and are not persisted. Unknown enum values, duplicate
-headers, and duplicate source identifiers are errors.
+columns are warnings and are not persisted. Duplicate headers and duplicate
+source identifiers are errors.
 
 ## Common types
 
@@ -32,13 +35,17 @@ headers, and duplicate source identifiers are errors.
 | local time | `HH:MM[:SS]` | Interpreted in scenario timezone and planning date |
 | integer quantity | integer | Non-negative unless a field says strictly positive |
 | decimal quantity | decimal | Base-10, finite, non-negative; no locale separators |
-| skills | string | `|`-separated unique slugs; blank means empty set |
+| skills | string | `|`-separated slugs, trimmed and lowercased; unique after normalization; blank means empty set |
 | money | decimal | Non-negative, scenario currency; max 4 decimal places |
 
-Time intervals require `start < end`. In v1 no interval crosses midnight;
-cross-midnight shifts require two planning dates or a later contract revision.
+Time intervals require `start < end`. Local center and vehicle intervals cannot
+cross midnight; cross-midnight shifts require two planning dates or a later
+contract revision. Delivery 2.1 does not claim that an order window fits one
+planning day, because it has no scenario planning date or timezone.
 The scenario timezone defaults to `America/Santiago`, but it is stored
-explicitly and daylight-saving ambiguity is rejected rather than guessed.
+explicitly. Delivery 2.1 validates explicit instant offsets and interval
+ordering; comparison with a scenario timezone/planning date and daylight-saving
+ambiguity checks for local operating times wait for scenario revisions.
 
 ## Orders
 
@@ -50,12 +57,13 @@ explicitly and daylight-saving ambiguity is rejected rather than guessed.
 | `longitude` | coordinate | yes | Valid point |
 | `priority` | integer | yes | `0..100` |
 | `time_window_start` | instant | yes | Before window end |
-| `time_window_end` | instant | yes | After start; same planning horizon |
+| `time_window_end` | instant | yes | After start; same planning horizon when a scenario revision exists |
 | `service_minutes` | integer | yes | `1..1440` |
 | `required_skills` | skills | no | Normalized lower-case slugs |
 
-Coordinates outside the configured Santiago/RM envelope produce a warning, not
-an automatic correction. Invalid global coordinates are errors.
+Invalid global coordinates are errors now. Coordinates outside a configured
+Santiago/RM envelope will produce a warning, not an automatic correction, once
+a scenario revision supplies that envelope.
 
 ## Order lines
 
@@ -68,7 +76,7 @@ an automatic correction. Invalid global coordinates are errors.
 | `unit_volume_m3` | decimal | yes | `>= 0`, max 9 decimal places |
 
 An order requires at least one line. Total units, weight, and volume are checked
-for numeric overflow before publication.
+for numeric overflow before publication in delivery 2.3.
 
 ## Inventory
 
@@ -78,10 +86,12 @@ for numeric overflow before publication.
 | `distribution_center_id` | identifier | yes | Must reference a center |
 | `sku` | identifier | yes | Unique with center |
 | `on_hand_quantity` | integer | yes | `>= 0` |
-| `reserved_quantity` | integer | yes | `>= 0` |
+| `externally_reserved_quantity` | integer | yes | `>= 0`; imported external reservations |
 | `safety_stock_quantity` | integer | yes | `>= 0` |
 
-`reserved_quantity + safety_stock_quantity <= on_hand_quantity` is required.
+`externally_reserved_quantity + safety_stock_quantity <= on_hand_quantity` is
+required. RouteOps reservations are a separate ledger created in later deliveries;
+they are never imported into or released from this external quantity.
 Missing center/SKU rows mean zero available stock; they are not synthesized.
 
 ## Distribution centers
@@ -132,8 +142,10 @@ money      -> integer cost units using 10,000 units per currency unit
 ```
 
 Values that cannot be represented exactly at these scales are rejected; they
-are never silently rounded. VROOM arrays always use `[units, grams, cm3]` in
-that order, but that mapping exists only inside the VROOM adapter. The v1 cost
+are never silently rounded. For example, weight `1.000001` kg is invalid while
+`1.000000` kg is representable as 1,000 grams. VROOM arrays always use
+`[units, grams, cm3]` in that order, but that mapping exists only inside the
+VROOM adapter. The v1 cost
 scale preserves the four accepted decimal places even for zero-decimal
 currencies such as CLP. The result carries the scale so presentation and KPI
 code can recover the exact decimal amount.
@@ -145,16 +157,20 @@ Each issue contains:
 ```json
 {
   "severity": "ERROR",
-  "code": "ORDER_WINDOW_INVALID",
+  "code": "INTERVAL_INVALID",
   "dataset": "orders",
-  "sheet": "orders",
+  "source": "orders.csv",
   "row": 14,
   "field": "time_window_end",
-  "message": "time_window_end must be after time_window_start",
-  "value_excerpt": "2026-10-05T07:30:00-03:00"
+  "message": "The start must be before the end",
+  "value_excerpt": "[value omitted; 25 characters]"
 }
 ```
 
 Stable codes are suitable for tests and UI grouping. Messages are explanatory
 and may evolve. Reports include total/accepted/rejected row counts and are
 downloadable without exposing server paths or stack traces.
+
+For workbook issues, `source` is `workbook.xlsx:<sheet>`; original local paths
+and arbitrary uploaded names are not reflected in reports. Value excerpts reveal
+only a bounded character count, never the original cell content.
