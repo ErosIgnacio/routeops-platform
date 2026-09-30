@@ -8,7 +8,7 @@ import os
 import re
 import xml.etree.ElementTree as ET
 import zipfile
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime, time
 from decimal import Decimal, InvalidOperation
@@ -120,9 +120,15 @@ def _excerpt(value: str | None) -> str | None:
 
 
 class _Collector:
-    def __init__(self, limits: ImportLimits, context: ValidationContext | None = None) -> None:
+    def __init__(
+        self,
+        limits: ImportLimits,
+        context: ValidationContext | None = None,
+        row_sink: Callable[[str, str, int, dict[str, Any]], None] | None = None,
+    ) -> None:
         self.limits = limits
         self.context = context
+        self.row_sink = row_sink
         self.area = (
             prepare_area(context.operational_area)
             if context is not None and context.operational_area is not None
@@ -220,6 +226,8 @@ class _Collector:
                 except ValueError as exc:
                     self.add(str(exc), "ERROR", name, source, row_number, spec.name, value)
             self._row_rules(name, source, row_number, parsed)
+            if self.row_sink is not None:
+                self.row_sink(name, source, row_number, parsed)
             self.rows[name].append(
                 (
                     row_number,
@@ -470,10 +478,11 @@ def validate_package(
     limits: ImportLimits | None = None,
     *,
     context: ValidationContext | None = None,
+    row_sink: Callable[[str, str, int, dict[str, Any]], None] | None = None,
 ) -> ValidationReport:
     """Validate exactly five named CSVs or one XLSX, without side effects."""
     limits = limits or ImportLimits()
-    collector = _Collector(limits, context)
+    collector = _Collector(limits, context, row_sink)
     if not files:
         collector.add("PACKAGE_INCOMPLETE", "ERROR")
         return collector.report

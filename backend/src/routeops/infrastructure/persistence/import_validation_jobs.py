@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import threading
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -425,7 +426,11 @@ class ValidationJobService:
             return True
 
     def replay_verified_for_publication(
-        self, scenario_id: UUID, batch_id: UUID
+        self,
+        scenario_id: UUID,
+        batch_id: UUID,
+        *,
+        row_sink: Callable[[str, str, int, dict[str, Any]], None] | None = None,
     ) -> tuple[dict[str, bytes], ValidationContext]:
         """2.3c handoff: bounded replay of the same bytes, rules and context.
 
@@ -445,14 +450,24 @@ class ValidationJobService:
                 or context_row is None
                 or report.package_sha256 != batch.package_sha256
                 or report.context_sha256 != context_row.context_sha256
+                or report.contract_version != batch.parser_version
             ):
                 raise ValidationJobError("VALIDATED_SOURCE_UNAVAILABLE", 409)
             expected_hash = report.report_sha256
+            expected_context_hash = context_row.context_sha256
+            expected_contract = report.contract_version
+            expected_validator = report.validator_version
         try:
             files, context, _ = self._read(batch_id)
         except (OSError, RuntimeError, ValueError) as exc:
             raise ValidationJobError("VALIDATED_SOURCE_UNAVAILABLE", 409) from exc
-        result = validate_package(files, self.limits, context=context)
+        if (
+            context.sha256 != expected_context_hash
+            or context.contract_version != expected_contract
+            or context.validator_version != expected_validator
+        ):
+            raise ValidationJobError("VALIDATED_SOURCE_MISMATCH", 409)
+        result = validate_package(files, self.limits, context=context, row_sink=row_sink)
         encoded = json.dumps(result.to_dict(), sort_keys=True, separators=(",", ":")).encode()
         if not result.valid or hashlib.sha256(encoded).hexdigest() != expected_hash:
             raise ValidationJobError("VALIDATED_SOURCE_MISMATCH", 409)

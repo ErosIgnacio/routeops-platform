@@ -2,28 +2,32 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import os
+import xml.etree.ElementTree as ET
+import zipfile
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
-from threading import Barrier, Lock
+from threading import Barrier, Event, Lock
 from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
 from alembic.config import Config
 from geoalchemy2.elements import WKTElement
-from sqlalchemy import Engine, create_engine, select, text
+from sqlalchemy import Engine, create_engine, func, select, text
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from routeops.application.import_context import ValidationContext
-from routeops.application.import_contract import DATASETS
+from routeops.application.import_contract import DATASETS, SCHEMA
 from routeops.application.import_templates import csv_template, xlsx_template
 from routeops.application.import_upload import ReceivedFile, ReceivedPackage, UploadError
 from routeops.application.import_validation import (
@@ -31,6 +35,10 @@ from routeops.application.import_validation import (
     Issue,
     ValidationReport,
     validate_package,
+)
+from routeops.infrastructure.persistence.import_publication import (
+    ImportPublicationService,
+    PublicationError,
 )
 from routeops.infrastructure.persistence.import_upload_repository import UploadService
 from routeops.infrastructure.persistence.import_validation_jobs import (
@@ -1004,6 +1012,159 @@ def _valid_package(storage: LocalObjectStorage, *, workbook: bool = False) -> Re
     return ReceivedPackage(tuple(files), manifest.hexdigest())
 
 
+def _publication_rows() -> dict[str, list[dict[str, str]]]:
+    return {
+        "orders": [
+            {
+                "order_id": "ORD-001",
+                "customer_reference": "Cliente",
+                "latitude": "-33.45",
+                "longitude": "-70.65",
+                "priority": "1",
+                "time_window_start": "2026-10-15T10:00:00-03:00",
+                "time_window_end": "2026-10-15T11:00:00-03:00",
+                "service_minutes": "10",
+                "required_skills": "cold",
+            }
+        ],
+        "order_lines": [
+            {
+                "order_id": "ORD-001",
+                "sku": "SKU-1",
+                "quantity": "2",
+                "unit_weight_kg": "1.25",
+                "unit_volume_m3": "0.002",
+            }
+        ],
+        "inventory": [
+            {
+                "snapshot_at": "2026-10-15T08:00:00-03:00",
+                "distribution_center_id": "CD-001",
+                "sku": "SKU-1",
+                "on_hand_quantity": "10",
+                "externally_reserved_quantity": "2",
+                "safety_stock_quantity": "1",
+            }
+        ],
+        "distribution_centers": [
+            {
+                "distribution_center_id": "CD-001",
+                "name": "Centro",
+                "latitude": "-33.44",
+                "longitude": "-70.64",
+                "operating_start": "08:00",
+                "operating_end": "18:00",
+            }
+        ],
+        "vehicles": [
+            {
+                "vehicle_id": "VEH-001",
+                "distribution_center_id": "CD-001",
+                "vehicle_type": "van",
+                "capacity_units": "20",
+                "capacity_weight_kg": "100",
+                "capacity_volume_m3": "10",
+                "shift_start": "08:00",
+                "shift_end": "18:00",
+                "skills": "cold",
+                "fixed_cost": "100",
+                "cost_per_hour": "10",
+                "cost_per_km": "1",
+            }
+        ],
+    }
+
+
+def _publication_package(
+    storage: LocalObjectStorage,
+    rows: dict[str, list[dict[str, str]]],
+    *,
+    workbook: bool = False,
+) -> ReceivedPackage:
+    csv_files: dict[str, bytes] = {}
+    for name in DATASETS:
+        stream = io.StringIO(newline="")
+        writer = csv.DictWriter(stream, fieldnames=[spec.name for spec in SCHEMA[name]])
+        writer.writeheader()
+        writer.writerows(rows[name])
+        csv_files[name] = stream.getvalue().encode()
+    payloads: dict[str, bytes]
+    if workbook:
+        source = io.BytesIO(xlsx_template())
+        target = io.BytesIO()
+        ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+        with zipfile.ZipFile(source) as original, zipfile.ZipFile(target, "w") as result:
+            for entry in original.infolist():
+                payload = original.read(entry.filename)
+                for index, name in enumerate(DATASETS, start=1):
+                    if entry.filename != f"xl/worksheets/sheet{index}.xml":
+                        continue
+                    sheet = ET.fromstring(payload)
+                    sheet_data = sheet.find(f"{ns}sheetData")
+                    assert sheet_data is not None
+                    for number, values in enumerate(rows[name], start=2):
+                        xml_row = ET.SubElement(sheet_data, f"{ns}row", r=str(number))
+                        for column, spec in enumerate(SCHEMA[name]):
+                            cell = ET.SubElement(
+                                xml_row, f"{ns}c", r=f"{chr(65 + column)}{number}", t="inlineStr"
+                            )
+                            inline = ET.SubElement(cell, f"{ns}is")
+                            ET.SubElement(inline, f"{ns}t").text = values.get(spec.name, "")
+                    payload = ET.tostring(sheet, encoding="utf-8", xml_declaration=True)
+                result.writestr(entry, payload)
+        payloads = {"workbook": target.getvalue()}
+    else:
+        payloads = csv_files
+    files: list[ReceivedFile] = []
+    for name, payload in payloads.items():
+        writer = storage.begin()
+        writer.write(payload)
+        files.append(
+            ReceivedFile(name, f"{name}.xlsx" if workbook else f"{name}.csv", writer.finish())
+        )
+    manifest = hashlib.sha256()
+    for item in sorted(files, key=lambda file: file.dataset):
+        manifest.update(
+            f"{item.dataset}\0{item.object.sha256}\0{item.object.size_bytes}\n".encode("ascii")
+        )
+    return ReceivedPackage(tuple(files), manifest.hexdigest())
+
+
+def _publication_services(
+    engine: Engine, storage: LocalObjectStorage, tmp_path: Path
+) -> tuple[UploadService, ValidationJobService, ImportPublicationService]:
+    sessions = create_session_factory(engine)
+    validation = ValidationJobService(
+        sessions, storage, ImportLimits(), retention_days=30, lease_seconds=60, max_attempts=3
+    )
+    return (
+        UploadService(sessions, storage),
+        validation,
+        ImportPublicationService(sessions, validation, tmp_path, retention_days=30),
+    )
+
+
+def _validated_publication_batch(
+    scenario: UUID,
+    key: str,
+    rows: dict[str, list[dict[str, str]]],
+    services: tuple[UploadService, ValidationJobService, ImportPublicationService],
+    storage: LocalObjectStorage,
+    *,
+    workbook: bool = False,
+) -> UUID:
+    upload, validation, _ = services
+    batch, _ = upload.create(scenario, key, _publication_package(storage, rows, workbook=workbook))
+    validation.request(scenario, batch, _validation_context())
+    claim = validation.claim()
+    assert claim is not None and claim[0] == batch
+    contents, context, _ = validation._read(batch)
+    report = validate_package(contents, context=context)
+    assert report.valid, report.to_dict()
+    assert validation.finish(batch, claim[1], report)
+    return batch
+
+
 def _validation_context(*, currency: str = "CLP") -> ValidationContext:
     return ValidationContext(
         planning_date=date(2026, 10, 15),
@@ -1012,6 +1173,243 @@ def _validation_context(*, currency: str = "CLP") -> ValidationContext:
         timezone_iana="America/Santiago",
         currency=currency,
     )
+
+
+@pytest.mark.parametrize("workbook", [False, True])
+def test_publication_persists_verified_rows_and_is_idempotent(
+    database: Engine, tmp_path: Path, workbook: bool
+) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path / "objects")
+    services = _publication_services(database, storage, tmp_path / "spool")
+    scenario = ScenarioRepository(sessions).create("Publication")
+    batch = _validated_publication_batch(
+        scenario, "first", _publication_rows(), services, storage, workbook=workbook
+    )
+    publisher = services[2]
+    revision, created = publisher.publish(scenario, batch)
+    assert created and revision["revision_no"] == 1
+    with sessions() as session:
+        revision_id = UUID(revision["id"])
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(OrderModel)
+                .where(OrderModel.scenario_revision_id == revision_id)
+            )
+            == 1
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(OrderLineModel)
+                .where(OrderLineModel.scenario_revision_id == revision_id)
+            )
+            == 1
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(VehicleModel)
+                .where(VehicleModel.scenario_revision_id == revision_id)
+            )
+            == 1
+        )
+        line = session.scalar(
+            select(InventorySnapshotLineModel).where(
+                InventorySnapshotLineModel.scenario_revision_id == revision_id
+            )
+        )
+        assert line is not None and line.available_quantity == 7
+        assert line.externally_reserved_quantity == 2
+        assert session.get(ImportBatchModel, batch).status == "PUBLISHED"  # type: ignore[union-attr]
+        assert [
+            item.to_status
+            for item in session.scalars(
+                select(ImportBatchEventModel)
+                .where(ImportBatchEventModel.batch_id == batch)
+                .order_by(ImportBatchEventModel.sequence)
+            )
+        ] == ["RECEIVED", "VALIDATING", "VALID", "PUBLISHED"]
+    for item in storage.objects.iterdir():
+        item.unlink()
+    repeated, created = publisher.publish(scenario, batch)
+    assert not created and repeated == revision
+    assert publisher.get_revision(scenario, 1)["snapshot_at"] is not None
+    assert publisher.list_revisions(scenario, limit=1)["items"] == [revision]
+
+
+def test_publication_rolls_back_and_preserves_previous_revisions(
+    database: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path / "objects")
+    services = _publication_services(database, storage, tmp_path / "spool")
+    scenario = ScenarioRepository(sessions).create("Revisions")
+    first = _validated_publication_batch(scenario, "one", _publication_rows(), services, storage)
+    publisher = services[2]
+    initial, _ = publisher.publish(scenario, first)
+    second = _validated_publication_batch(scenario, "two", _publication_rows(), services, storage)
+    original = publisher._insert_datasets
+
+    def broken(*args: object, **kwargs: object) -> None:
+        original(*args, **kwargs)
+        raise RuntimeError("injected after insertion")
+
+    monkeypatch.setattr(publisher, "_insert_datasets", broken)
+    with pytest.raises(RuntimeError, match="injected"):
+        publisher.publish(scenario, second)
+    with sessions() as session:
+        assert session.get(ImportBatchModel, second).status == "VALID"  # type: ignore[union-attr]
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(ScenarioRevisionModel)
+                .where(ScenarioRevisionModel.scenario_id == scenario)
+            )
+            == 1
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(DistributionCenterModel)
+                .where(DistributionCenterModel.import_batch_id == second)
+            )
+            == 0
+        )
+    monkeypatch.setattr(publisher, "_insert_datasets", original)
+    next_revision, _ = publisher.publish(scenario, second)
+    assert next_revision["revision_no"] == 2
+    assert publisher.get_revision(scenario, 1)["id"] == initial["id"]
+    first_page = publisher.list_revisions(scenario, limit=1)
+    assert first_page == {"items": [initial], "next_after": 1}
+    assert publisher.list_revisions(scenario, after=1, limit=1) == {
+        "items": [next_revision],
+        "next_after": None,
+    }
+
+
+def test_publication_rejects_empty_expired_and_tampered_packages(
+    database: Engine, tmp_path: Path
+) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path / "objects")
+    services = _publication_services(database, storage, tmp_path / "spool")
+    scenario = ScenarioRepository(sessions).create("Rejection")
+    empty = _validated_publication_batch(
+        scenario, "empty", {name: [] for name in DATASETS}, services, storage
+    )
+    with pytest.raises(PublicationError, match="PUBLISH_PACKAGE_EMPTY"):
+        services[2].publish(scenario, empty)
+    no_inventory = _publication_rows()
+    no_inventory["inventory"] = []
+    incomplete = _validated_publication_batch(
+        scenario, "no-inventory", no_inventory, services, storage
+    )
+    with pytest.raises(PublicationError, match="PUBLISH_INVENTORY_EMPTY"):
+        services[2].publish(scenario, incomplete)
+    expired = _validated_publication_batch(
+        scenario, "expired", _publication_rows(), services, storage
+    )
+    with sessions.begin() as session:
+        session.add(
+            ImportBatchExpirationModel(
+                batch_id=expired, expired_at=datetime.now(UTC), reason="RETENTION"
+            )
+        )
+    with pytest.raises(PublicationError, match="BATCH_EXPIRED"):
+        services[2].publish(scenario, expired)
+    tampered = _validated_publication_batch(
+        scenario, "tampered", _publication_rows(), services, storage
+    )
+    with sessions() as session:
+        file = session.scalar(select(ImportFileModel).where(ImportFileModel.batch_id == tampered))
+        assert file is not None
+        (storage.objects / file.storage_key).write_bytes(b"tampered")
+    with pytest.raises(PublicationError, match="VALIDATED_SOURCE_UNAVAILABLE"):
+        services[2].publish(scenario, tampered)
+
+
+def test_publication_concurrent_batches_get_unique_revisions(
+    database: Engine, tmp_path: Path
+) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path / "objects")
+    services = _publication_services(database, storage, tmp_path / "spool")
+    scenario = ScenarioRepository(sessions).create("Concurrent")
+    batches = [
+        _validated_publication_batch(
+            scenario, f"concurrent-{index}", _publication_rows(), services, storage
+        )
+        for index in range(2)
+    ]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(services[2].publish, scenario, batch) for batch in batches * 2]
+        results = [future.result() for future in futures]
+    assert sorted({result[0]["revision_no"] for result in results}) == [1, 2]
+    assert sum(created for _, created in results) == 2
+    assert len({result[0]["id"] for result in results}) == 2
+
+
+def test_publication_expiration_wins_after_verified_replay(
+    database: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path / "objects")
+    services = _publication_services(database, storage, tmp_path / "spool")
+    scenario = ScenarioRepository(sessions).create("Expiry race")
+    batch = _validated_publication_batch(
+        scenario, "expiry-race", _publication_rows(), services, storage
+    )
+    replayed = Event()
+    proceed = Event()
+    original = services[1].replay_verified_for_publication
+
+    def delayed(*args: object, **kwargs: object) -> object:
+        result = original(*args, **kwargs)
+        replayed.set()
+        assert proceed.wait(10)
+        return result
+
+    monkeypatch.setattr(services[1], "replay_verified_for_publication", delayed)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(services[2].publish, scenario, batch)
+        assert replayed.wait(10)
+        with sessions.begin() as session:
+            session.add(
+                ImportBatchExpirationModel(
+                    batch_id=batch, expired_at=datetime.now(UTC), reason="RETENTION"
+                )
+            )
+        proceed.set()
+        with pytest.raises(PublicationError, match="BATCH_EXPIRED"):
+            future.result()
+    with sessions() as session:
+        assert (
+            session.scalar(
+                select(ScenarioRevisionModel.id).where(
+                    ScenarioRevisionModel.import_batch_id == batch
+                )
+            )
+            is None
+        )
+        saved = session.get(ImportBatchModel, batch)
+        assert saved is not None and saved.status == "VALID"
+
+
+def test_publication_rejects_unvalidated_batch(database: Engine, tmp_path: Path) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path / "objects")
+    upload, validation, publisher = _publication_services(database, storage, tmp_path / "spool")
+    scenario = ScenarioRepository(sessions).create("States")
+    batch, _ = upload.create(
+        scenario, "received", _publication_package(storage, _publication_rows())
+    )
+    with pytest.raises(PublicationError, match="BATCH_NOT_VALID"):
+        publisher.publish(scenario, batch)
+    validation.request(scenario, batch, _validation_context())
+    with pytest.raises(PublicationError, match="BATCH_NOT_VALID"):
+        publisher.publish(scenario, batch)
 
 
 @pytest.mark.parametrize("workbook", [False, True])

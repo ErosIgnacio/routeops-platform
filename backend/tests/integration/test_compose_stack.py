@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 import os
 import time
 from uuid import uuid4
@@ -7,7 +9,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from routeops.application.import_contract import DATASETS
+from routeops.application.import_contract import DATASETS, SCHEMA
 from routeops.application.import_templates import csv_template, xlsx_template
 
 pytestmark = pytest.mark.integration
@@ -135,3 +137,80 @@ def test_real_stack_contextual_validation(workbook: bool) -> None:
         issues.raise_for_status()
         assert issues.json() == {"items": [], "next_after": None}
         assert "storage_key" not in status.text
+
+
+def test_real_stack_publishes_and_reads_partial_dataset_revision() -> None:
+    base_url = os.getenv("ROUTEOPS_INTEGRATION_BASE_URL")
+    if not base_url:
+        pytest.skip("set ROUTEOPS_INTEGRATION_BASE_URL to run against Compose")
+    values = {
+        "distribution_centers": {
+            "distribution_center_id": "CD-001",
+            "name": "Centro",
+            "latitude": "-33.44",
+            "longitude": "-70.64",
+            "operating_start": "08:00",
+            "operating_end": "18:00",
+        },
+        "inventory": {
+            "snapshot_at": "2026-10-15T09:00:00-03:00",
+            "distribution_center_id": "CD-001",
+            "sku": "SKU-1",
+            "on_hand_quantity": "10",
+            "externally_reserved_quantity": "2",
+            "safety_stock_quantity": "1",
+        },
+    }
+    files = []
+    for name in DATASETS:
+        stream = io.StringIO(newline="")
+        writer = csv.DictWriter(stream, fieldnames=[field.name for field in SCHEMA[name]])
+        writer.writeheader()
+        if name in values:
+            writer.writerow(values[name])
+        files.append(("files", (f"{name}.csv", stream.getvalue().encode(), "text/csv")))
+    with httpx.Client(base_url=base_url, timeout=60) as client:
+        scenario = client.post("/api/v1/scenarios", json={"name": "Publication integration"})
+        scenario.raise_for_status()
+        scenario_id = scenario.json()["id"]
+        base = f"/api/v1/scenarios/{scenario_id}"
+        uploaded = client.post(
+            f"{base}/imports", files=files, headers={"Idempotency-Key": uuid4().hex}
+        )
+        assert uploaded.status_code == 201
+        batch_id = uploaded.json()["id"]
+        validation_url = f"{base}/imports/{batch_id}/validation"
+        started = client.post(
+            validation_url,
+            json={
+                "planning_date": "2026-10-15",
+                "horizon_start_at": "2026-10-15T08:00:00-03:00",
+                "horizon_end_at": "2026-10-15T20:00:00-03:00",
+                "timezone_iana": "America/Santiago",
+                "currency": "CLP",
+            },
+        )
+        assert started.status_code in (200, 202)
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            status = client.get(validation_url)
+            status.raise_for_status()
+            if status.json()["status"] != "VALIDATING":
+                break
+            time.sleep(0.25)
+        assert status.json()["status"] == "VALID"
+        publication = client.post(f"{base}/imports/{batch_id}/publish")
+        assert publication.status_code == 201, publication.text
+        revision = publication.json()
+        assert revision["revision_no"] == 1
+        repeated = client.post(f"{base}/imports/{batch_id}/publish")
+        assert repeated.status_code == 200 and repeated.json() == revision
+        listed = client.get(f"{base}/revisions?limit=1")
+        assert listed.status_code == 200
+        assert listed.json() == {"items": [revision], "next_after": None}
+        detail = client.get(f"{base}/revisions/1")
+        assert detail.status_code == 200
+        assert detail.json()["counts"]["inventory"]["accepted"] == 1
+        assert detail.json()["counts"]["orders"]["accepted"] == 0
+        assert detail.json()["snapshot_at"] is not None
+        assert "storage_key" not in detail.text

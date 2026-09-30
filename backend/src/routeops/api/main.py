@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from routeops.api.logging import configure_logging
 from routeops.application.import_context import ValidationContext
@@ -26,6 +27,10 @@ from routeops.infrastructure.persistence import (
     DatabaseRunRepository,
     create_database_engine,
     create_session_factory,
+)
+from routeops.infrastructure.persistence.import_publication import (
+    ImportPublicationService,
+    PublicationError,
 )
 from routeops.infrastructure.persistence.import_upload_repository import UploadService
 from routeops.infrastructure.persistence.import_validation_jobs import (
@@ -61,6 +66,12 @@ validation_service = ValidationJobService(
     retention_days=settings.import_retention_days,
     lease_seconds=settings.import_validation_lease_seconds,
     max_attempts=settings.import_validation_max_attempts,
+)
+publication_service = ImportPublicationService(
+    sessions,
+    validation_service,
+    settings.import_storage_root,
+    retention_days=settings.import_retention_days,
 )
 osrm = OsrmClient(
     settings.osrm_url,
@@ -137,6 +148,14 @@ def validation_job_error(_: Request, exc: ValidationJobError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={"code": exc.code, "detail": "Import validation request could not be accepted."},
+    )
+
+
+@app.exception_handler(PublicationError)
+def publication_error(_: Request, exc: PublicationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"code": exc.code, "detail": "Import publication could not be completed."},
     )
 
 
@@ -306,6 +325,27 @@ def get_import_validation_issues(
     scenario_id: UUID, batch_id: UUID, after: int = 0, limit: int = 100
 ) -> dict[str, Any]:
     return validation_service.issues(scenario_id, batch_id, after=after, limit=limit)
+
+
+@app.post("/api/v1/scenarios/{scenario_id}/imports/{batch_id}/publish", tags=["imports"])
+def publish_import(scenario_id: UUID, batch_id: UUID, response: Response) -> dict[str, Any]:
+    try:
+        result, created = publication_service.publish(scenario_id, batch_id)
+    except (OSError, SQLAlchemyError) as exc:
+        logger.exception("import_publication_failed", extra={"batch_id": str(batch_id)})
+        raise PublicationError("PUBLICATION_INFRASTRUCTURE_FAILED", 503) from exc
+    response.status_code = 201 if created else 200
+    return result
+
+
+@app.get("/api/v1/scenarios/{scenario_id}/revisions", tags=["imports"])
+def list_scenario_revisions(scenario_id: UUID, after: int = 0, limit: int = 100) -> dict[str, Any]:
+    return publication_service.list_revisions(scenario_id, after=after, limit=limit)
+
+
+@app.get("/api/v1/scenarios/{scenario_id}/revisions/{revision_no}", tags=["imports"])
+def get_scenario_revision(scenario_id: UUID, revision_no: int) -> dict[str, Any]:
+    return publication_service.get_revision(scenario_id, revision_no)
 
 
 @app.get("/api/v1/runs/latest", tags=["planning"])
