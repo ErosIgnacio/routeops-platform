@@ -58,9 +58,7 @@ class DatabaseRunRepository:
                         distribution_center_id=route["distribution_center_id"],
                         sequence=sequence,
                         distance_meters=int(route["totals"]["distance_meters"]),
-                        total_duration_seconds=int(
-                            route["totals"]["total_duration_seconds"]
-                        ),
+                        total_duration_seconds=int(route["totals"]["total_duration_seconds"]),
                         geometry=geometry,
                         payload=route,
                     )
@@ -92,9 +90,7 @@ class DatabaseRunRepository:
     def latest(self) -> dict[str, Any] | None:
         with self._sessions() as session:
             statement = (
-                select(PlanningRunModel)
-                .order_by(PlanningRunModel.started_at.desc())
-                .limit(1)
+                select(PlanningRunModel).order_by(PlanningRunModel.started_at.desc()).limit(1)
             )
             run = session.scalar(statement)
             return self._serialize(run) if run is not None else None

@@ -130,6 +130,8 @@ def main() -> int:
                 "centers": args.centers,
                 "vehicles": args.vehicles,
                 "matrix_cells": sum(len(row) for row in matrix),
+                "solver_locations_upper_bound": args.orders + 2 * args.vehicles,
+                "solver_matrix_cells_upper_bound": (args.orders + 2 * args.vehicles) ** 2,
                 "prepare_ms": prepare_ms,
                 "osrm_matrix_ms": matrix_ms,
                 "vroom_solve_ms": solve_ms,

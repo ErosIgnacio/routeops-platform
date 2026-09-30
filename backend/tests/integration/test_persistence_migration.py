@@ -2263,6 +2263,15 @@ def test_revision_run_idempotency_and_workload_limit(database: Engine, tmp_path:
     assert created and not again and first["run_id"] == repeated["run_id"]
     with pytest.raises(PlanningRunError, match="RUN_IDEMPOTENCY_CONFLICT"):
         service.submit(scenario, 1, "same-key", policy_version="greedy-v1")
+    matrix_limited = RevisionRunService(
+        service.sessions,
+        service.allocation,
+        service.osrm,
+        service.solver,
+        WorkloadLimits(max_solver_matrix_cells=8),
+    )
+    with pytest.raises(RunInputError, match="SOLVER_WORKLOAD_LIMIT"):
+        matrix_limited.submit(scenario, 1, "solver-matrix-too-large")
     limited = RevisionRunService(
         service.sessions,
         service.allocation,
@@ -2276,6 +2285,15 @@ def test_revision_run_idempotency_and_workload_limit(database: Engine, tmp_path:
     new_batch = _validated_publication_batch(scenario, "larger", rows, services, storage)
     # A valid larger publication is not interpreted as a solver capacity guarantee.
     services[2].publish(scenario, new_batch)
+    inventory_limited = RevisionRunService(
+        service.sessions,
+        service.allocation,
+        service.osrm,
+        service.solver,
+        WorkloadLimits(max_inventory_positions=1),
+    )
+    with pytest.raises(RunInputError, match="SOLVER_WORKLOAD_LIMIT"):
+        inventory_limited.submit(scenario, 2, "inventory-too-large")
     prior, _ = service.submit(scenario, 2, "already-created")
     same, created = limited.submit(scenario, 2, "already-created")
     assert not created and same["run_id"] == prior["run_id"]

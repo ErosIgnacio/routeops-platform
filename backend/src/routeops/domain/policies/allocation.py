@@ -51,8 +51,7 @@ class DeterministicAllocationPolicy:
                 center
                 for center in scenario.centers
                 if all(
-                    available.get((center.id, line.sku), 0) >= line.quantity
-                    for line in order.lines
+                    available.get((center.id, line.sku), 0) >= line.quantity for line in order.lines
                 )
             ]
             if not stock_eligible:
@@ -67,9 +66,7 @@ class DeterministicAllocationPolicy:
                                 certainty=Certainty.PROVEN,
                                 detail="No distribution center can cover every order line.",
                                 evidence={
-                                    "required": {
-                                        line.sku: line.quantity for line in order.lines
-                                    }
+                                    "required": {line.sku: line.quantity for line in order.lines}
                                 },
                             ),
                         ),

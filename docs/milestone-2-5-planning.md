@@ -1,7 +1,9 @@
 # Delivery 2.5: planning published revisions
 
-Status: implemented on `feat/m2-5-planning-execution`, awaiting review. No 2.5
-commit or push is part of this delivery.
+Status: accepted and published as commit
+`0755ac75ce42550e252d42ae46d53c09a6a7c140` on `main` and
+`feat/m2-5-planning-execution`. Integrated acceptance is tracked in
+[the 2.6 report](milestone-2-6-acceptance.md).
 
 ## Run lifecycle and inventory
 
@@ -95,7 +97,22 @@ vehicles, and 80 center × order matrix cells. Each is configurable using
 oversized revisions with `SOLVER_WORKLOAD_LIMIT` (HTTP 413) before reservations.
 The import row limits do not imply planning capacity.
 
+Integrated acceptance distinguishes this 80-cell center-to-order OSRM matrix
+from routing work. VROOM also routes jobs and vehicle start/end points. The new
+`ROUTEOPS_PLANNING_MAX_SOLVER_MATRIX_CELLS` default is 1,024, a conservative
+upper bound of `(orders + 2 * vehicles)^2` checked before reservations. The
+20/60/4/6 sample has at most 32 such points under this bound. Duplicate
+locations can reduce actual work, and VROOM/OSRM can make other requests; this
+setting does not claim that every solve uses a literal 1,024-cell matrix.
+Activating a published revision also reconciles its inventory positions. The
+measured integrated flow therefore adds
+`ROUTEOPS_PLANNING_MAX_INVENTORY_POSITIONS=10000` before a run is created.
+Larger packages can be published, but need a smaller executable revision or a
+future measured improvement to activation. The 10,000-position sample reached
+`READY` in 13.225–23.993 s with two concurrent clients; this is a bounded
+local observation, not a performance promise.
+
 These samples measured client-side elapsed time and Python allocations for one
 synthetic request. They do not measure VROOM/OSRM process RSS, HTTP concurrency,
-or a maximum safe production workload. Delivery 2.6 will measure the integrated
-HTTP workflow under concurrency and set acceptance targets from those results.
+or a maximum safe production workload. Delivery 2.6 measured the integrated
+HTTP workflow and container memory separately in the linked acceptance report.

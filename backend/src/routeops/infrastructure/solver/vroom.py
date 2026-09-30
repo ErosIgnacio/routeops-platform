@@ -320,9 +320,7 @@ class VroomAdapter:
                 waiting_seconds=self._as_int(
                     raw_route.get("waiting_time", 0), "route.waiting_time"
                 ),
-                total_duration_seconds=self._as_int(
-                    raw_route.get("duration", 0), "route.duration"
-                )
+                total_duration_seconds=self._as_int(raw_route.get("duration", 0), "route.duration")
                 + self._as_int(raw_route.get("service", 0), "route.service")
                 + self._as_int(raw_route.get("waiting_time", 0), "route.waiting_time"),
                 objective_cost_units=self._as_int(raw_route.get("cost", 0), "route.cost"),

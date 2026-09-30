@@ -97,6 +97,12 @@ class Settings:
                 max_lines=int(os.getenv("ROUTEOPS_PLANNING_MAX_LINES", "60")),
                 max_vehicles=int(os.getenv("ROUTEOPS_PLANNING_MAX_VEHICLES", "6")),
                 max_matrix_cells=int(os.getenv("ROUTEOPS_PLANNING_MAX_MATRIX_CELLS", "80")),
+                max_solver_matrix_cells=int(
+                    os.getenv("ROUTEOPS_PLANNING_MAX_SOLVER_MATRIX_CELLS", "1024")
+                ),
+                max_inventory_positions=int(
+                    os.getenv("ROUTEOPS_PLANNING_MAX_INVENTORY_POSITIONS", "10000")
+                ),
             ),
             planning_lease_seconds=planning_lease,
             planning_max_attempts=planning_attempts,

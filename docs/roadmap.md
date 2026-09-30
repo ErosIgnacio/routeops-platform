@@ -61,7 +61,10 @@ Acceptance criteria:
 
 ## Milestone 2 — data and inventory
 
-Status: **deliveries 2.1–2.5 accepted; 2.6 in progress**. The import workspace
+Status: **Milestone 2 formally accepted and closed as `v0.2.0`**. Deliveries
+2.1–2.6 are complete. The acceptance evidence, local HTTP benchmarks,
+objectives, and known limitations are in
+[the 2.6 acceptance report](milestone-2-6-acceptance.md). The import workspace
 and local performance samples for 2.3 are recorded in
 [the 2.3d guide](milestone-2-3d-import-ui.md). These single-run measurements are
 not capacity guarantees. The 2.4 inventory, policy evaluation, and reservations
@@ -79,10 +82,14 @@ Approved delivery sequence (2026-09-28):
    measured VROOM workload limit.
 6. **2.6:** integrated acceptance, concurrency, recovery, and demo presentation.
 
-Delivery 2.6 will measure the import flow over HTTP under concurrent clients,
-report latency and process memory on representative hardware, and establish
-performance objectives from measured results. No objective is inferred from the
-local service-level samples collected in 2.3d.
+Delivery 2.6 measured import and planning through HTTP under concurrent
+clients, including process RSS and container memory. Its targets apply only to
+the local measured hardware and workloads; the service-level samples from 2.3d
+remain separate from these HTTP observations.
+Known nonblocking limits are the local-only deployment, no global-optimality
+claim for assignment, polling-related latency variation, and the Vite bundle
+size warning. Published import packages can exceed the independently measured
+planning limits and receive a pre-run HTTP 413 without creating reservations.
 
 Assignment demos and phase boundaries:
 

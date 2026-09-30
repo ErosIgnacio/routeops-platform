@@ -26,6 +26,7 @@ from routeops.domain.optimization import (
 from routeops.infrastructure.persistence.models import (
     DistributionCenterModel,
     ImportValidationContextModel,
+    InventorySnapshotLineModel,
     InventorySnapshotModel,
     OrderLineModel,
     OrderModel,
@@ -48,9 +49,21 @@ class WorkloadLimits:
     max_lines: int = 60
     max_vehicles: int = 6
     max_matrix_cells: int = 80
+    max_solver_matrix_cells: int = 1024
+    max_inventory_positions: int = 10_000
 
     def __post_init__(self) -> None:
-        if min(self.max_orders, self.max_lines, self.max_vehicles, self.max_matrix_cells) <= 0:
+        if (
+            min(
+                self.max_orders,
+                self.max_lines,
+                self.max_vehicles,
+                self.max_matrix_cells,
+                self.max_solver_matrix_cells,
+                self.max_inventory_positions,
+            )
+            <= 0
+        ):
             raise ValueError("planning workload limits must be positive")
 
     def check(self, orders: int, lines: int, vehicles: int, centers: int) -> None:
@@ -59,6 +72,7 @@ class WorkloadLimits:
             or lines > self.max_lines
             or vehicles > self.max_vehicles
             or orders * centers > self.max_matrix_cells
+            or (orders + 2 * vehicles) ** 2 > self.max_solver_matrix_cells
         ):
             raise RunInputError("SOLVER_WORKLOAD_LIMIT", 413)
 
@@ -66,7 +80,13 @@ class WorkloadLimits:
 def check_revision_size(session: Session, revision_id: UUID, limits: WorkloadLimits) -> None:
     """Reject oversized revisions before materializing rows or contacting dependencies."""
 
-    models = (OrderModel, OrderLineModel, VehicleModel, DistributionCenterModel)
+    models = (
+        OrderModel,
+        OrderLineModel,
+        VehicleModel,
+        DistributionCenterModel,
+        InventorySnapshotLineModel,
+    )
     counts = [
         int(
             session.scalar(
@@ -79,12 +99,14 @@ def check_revision_size(session: Session, revision_id: UUID, limits: WorkloadLim
         for model in models
     ]
 
-    orders, lines, vehicles, centers = counts
+    orders, lines, vehicles, centers, inventory_positions = counts
     if orders > limits.max_orders:
         raise RunInputError("SOLVER_WORKLOAD_LIMIT", 413)
     if lines > limits.max_lines:
         raise RunInputError("SOLVER_WORKLOAD_LIMIT", 413)
     if vehicles > limits.max_vehicles:
+        raise RunInputError("SOLVER_WORKLOAD_LIMIT", 413)
+    if inventory_positions > limits.max_inventory_positions:
         raise RunInputError("SOLVER_WORKLOAD_LIMIT", 413)
     limits.check(orders, lines, vehicles, centers)
 

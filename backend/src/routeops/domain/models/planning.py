@@ -82,10 +82,7 @@ class Order:
     def demand(self) -> Capacity:
         units = sum(line.quantity for line in self.lines)
         weight = sum(
-            (
-                Decimal(line.quantity) * line.unit_weight_kg * Decimal(1000)
-                for line in self.lines
-            ),
+            (Decimal(line.quantity) * line.unit_weight_kg * Decimal(1000) for line in self.lines),
             start=Decimal(0),
         )
         volume = sum(

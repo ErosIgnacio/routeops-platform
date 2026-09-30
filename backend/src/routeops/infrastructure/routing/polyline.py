@@ -16,9 +16,7 @@ def decode_polyline(encoded: str, precision: int = 5) -> tuple[Coordinate, ...]:
         longitude_delta, index = _decode_value(encoded, index)
         latitude += latitude_delta
         longitude += longitude_delta
-        coordinates.append(
-            Coordinate(latitude=latitude / factor, longitude=longitude / factor)
-        )
+        coordinates.append(Coordinate(latitude=latitude / factor, longitude=longitude / factor))
     return tuple(coordinates)
 
 
