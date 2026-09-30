@@ -83,8 +83,10 @@ before publication or execution; no persisted calculation uses binary float.
 `externally_reserved_quantity` always denotes reservations imported from the
 source system. Imported availability equals stock on hand minus external
 reservations and safety stock. `routeops_reserved_quantity` is zero in the
-initial imported snapshot. Later run snapshots may capture RouteOps reservations
-separately; 2.4 will introduce mutable positions and a reservation ledger.
+initial imported snapshot. Delivery 2.4 introduces scenario-wide operational
+positions and separate RouteOps reservation lines. Their generated availability
+subtracts external reservations, safety stock, and active RouteOps reservations
+exactly once. See [the 2.4 allocation design](milestone-2-4-allocation.md).
 
 Skills are PostgreSQL `varchar(100)[]`, stored in sorted, unique, lower-case
 slug order. The repository normalizes `|`-delimited input, and the database
@@ -126,6 +128,6 @@ batch state and append its publication event. An idempotency key and content
 hash will make retries return the existing revision without duplication.
 
 A nonempty scenario that cannot be optimized will receive an explicit
-diagnosis before any call to VROOM. Allocation, one-center order coverage,
-operational stock, reservations, and compensation are part of 2.4. VROOM
+diagnosis before any call to VROOM. Delivery 2.4 prepares allocation and
+reservations; execution of imported revisions joins them in 2.5. VROOM
 continues to be reached exclusively through `SolverGateway`.

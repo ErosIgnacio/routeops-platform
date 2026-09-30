@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import json
 import os
 import xml.etree.ElementTree as ET
 import zipfile
@@ -36,6 +37,10 @@ from routeops.application.import_validation import (
     ValidationReport,
     validate_package,
 )
+from routeops.domain.policies.operational_allocation import (
+    OperationalAllocationPolicy,
+    OrderAllocation,
+)
 from routeops.infrastructure.persistence.import_publication import (
     ImportPublicationService,
     PublicationError,
@@ -46,6 +51,10 @@ from routeops.infrastructure.persistence.import_validation_jobs import (
     ValidationJobService,
 )
 from routeops.infrastructure.persistence.models import (
+    AllocationAttemptEventModel,
+    AllocationAttemptModel,
+    AllocationDecisionSnapshotModel,
+    AllocationReservationLineModel,
     DistributionCenterModel,
     ImportBatchEventModel,
     ImportBatchExpirationModel,
@@ -57,12 +66,18 @@ from routeops.infrastructure.persistence.models import (
     ImportValidationReportModel,
     InventorySnapshotLineModel,
     InventorySnapshotModel,
+    OperationalInventoryPositionModel,
+    OperationalInventoryStateModel,
     OrderLineModel,
     OrderModel,
     ScenarioModel,
     ScenarioRevisionModel,
     ValidationIssueModel,
     VehicleModel,
+)
+from routeops.infrastructure.persistence.operational_allocation import (
+    AllocationError,
+    OperationalAllocationService,
 )
 from routeops.infrastructure.persistence.planning_data_repository import (
     ImportBatchRepository,
@@ -72,6 +87,7 @@ from routeops.infrastructure.persistence.planning_data_repository import (
 )
 from routeops.infrastructure.persistence.repository import DatabaseRunRepository
 from routeops.infrastructure.persistence.session import create_session_factory
+from routeops.infrastructure.routing.errors import RoutingDependencyError
 from routeops.infrastructure.storage import LocalObjectStorage
 from routeops.infrastructure.storage.maintenance import ImportStorageMaintenance
 
@@ -659,7 +675,7 @@ def test_validation_migration_downgrade_keeps_postgis_and_previous_triggers(
                 postgis_oid = connection.scalar(
                     text("SELECT oid FROM pg_extension WHERE extname='postgis'")
                 )
-            migrate(monkeypatch, url, "head")
+            migrate(monkeypatch, url, "7a69c4d10e32")
             with engine.connect() as connection:
                 assert connection.scalar(text(TRIGGER_COUNT_SQL)) == before + 2
             command.downgrade(Config(str(ALEMBIC_INI)), "8db12e7c5f09")
@@ -821,7 +837,7 @@ def test_revisions_keys_links_and_downgrade_guard(
     with pytest.raises(RuntimeError, match="downgrade blocked"):
         command.downgrade(Config(str(ALEMBIC_INI)), "20260924_0001")
     with database.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "7a69c4d10e32"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "d42e4a91b6c0"
 
 
 def test_quantities_costs_geometry_and_immutability(database: Engine) -> None:
@@ -2012,3 +2028,350 @@ def test_retention_audit_and_orphan_recovery(database: Engine, tmp_path: Path) -
             scenario_id, "expired-key", _stored_package(storage)
         )
     assert caught.value.code == "BATCH_EXPIRED"
+
+
+class FixedAllocationTravel:
+    def duration_seconds(self, origin: object, destination: object) -> int:
+        return 120
+
+
+class FailedAllocationTravel:
+    def duration_seconds(self, origin: object, destination: object) -> int:
+        raise RoutingDependencyError("synthetic OSRM outage")
+
+
+def _published_allocation_fixture(
+    database: Engine, tmp_path: Path, rows: dict[str, list[dict[str, str]]] | None = None
+) -> tuple[
+    UUID, LocalObjectStorage, tuple[UploadService, ValidationJobService, ImportPublicationService]
+]:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path / "objects")
+    services = _publication_services(database, storage, tmp_path / "spool")
+    scenario = ScenarioRepository(sessions).create("Operational allocation")
+    package_rows = rows if rows is not None else _publication_rows()
+    batch = _validated_publication_batch(scenario, "first", package_rows, services, storage)
+    services[2].publish(scenario, batch)
+    return scenario, storage, services
+
+
+def test_operational_multiline_reservations_and_repeated_transitions(
+    database: Engine, tmp_path: Path
+) -> None:
+    rows = _publication_rows()
+    rows["order_lines"].append({**rows["order_lines"][0], "sku": "SKU-2", "quantity": "3"})
+    rows["inventory"].append({**rows["inventory"][0], "sku": "SKU-2", "on_hand_quantity": "8"})
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path, rows)
+    sessions = create_session_factory(database)
+    service = OperationalAllocationService(sessions, FixedAllocationTravel())
+    held = service.allocate(scenario, 1, "multiline")
+    assert held["status"] == "HELD" and len(held["reservations"]) == 2
+    assert {row["sku"] for row in held["reservations"]} == {"SKU-1", "SKU-2"}
+    assert {row["center_id"] for row in held["reservations"]} == {"CD-001"}
+    assert held["decisions"][0]["reason_code"] is None
+    assert held["decisions"][0]["evidence"]["candidates"][0]["stock"]["SKU-1"] == {
+        "on_hand": 10,
+        "externally_reserved": 2,
+        "safety_stock": 1,
+        "routeops_reserved": 0,
+        "available_before": 7,
+    }
+    with sessions() as session:
+        positions = list(session.scalars(select(OperationalInventoryPositionModel)))
+        assert {
+            row.sku: (row.routeops_reserved_quantity, row.available_quantity) for row in positions
+        } == {"SKU-1": (2, 5), "SKU-2": (3, 2)}
+    assert service.allocate(scenario, 1, "multiline") == held
+    confirmed = service.confirm(UUID(held["id"]))
+    assert confirmed["status"] == "CONFIRMED"
+    assert service.confirm(UUID(held["id"])) == confirmed
+    released = service.release(UUID(held["id"]))
+    assert released["status"] == "RELEASED"
+    assert service.release(UUID(held["id"])) == released
+    with pytest.raises(AllocationError, match="ALLOCATION_TRANSITION_INVALID"):
+        service.confirm(UUID(held["id"]))
+    with sessions() as session:
+        positions = list(session.scalars(select(OperationalInventoryPositionModel)))
+        assert {
+            row.sku: (
+                row.externally_reserved_quantity,
+                row.routeops_reserved_quantity,
+                row.available_quantity,
+            )
+            for row in positions
+        } == {"SKU-1": (2, 0, 7), "SKU-2": (2, 0, 5)}
+        assert session.scalar(select(func.count()).select_from(AllocationReservationLineModel)) == 2
+        assert [
+            item.to_status
+            for item in session.scalars(
+                select(AllocationAttemptEventModel).order_by(AllocationAttemptEventModel.sequence)
+            )
+        ] == ["BUILDING", "HELD", "CONFIRMED", "RELEASED"]
+    snapshot = held["inventory_snapshot"]
+    assert (
+        hashlib.sha256(
+            json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        == held["inventory_sha256"]
+    )
+    rejects(
+        database,
+        "UPDATE allocation_decision_snapshots SET inventory_sha256=:v WHERE attempt_id=:id",
+        {"v": SHA, "id": held["id"]},
+        "55000",
+    )
+    rejects(
+        database,
+        "DELETE FROM allocation_order_decisions WHERE attempt_id=:id",
+        {"id": held["id"]},
+        "55000",
+    )
+
+
+def test_published_precision_is_checked_with_exact_decimals(
+    database: Engine, tmp_path: Path
+) -> None:
+    rows = _publication_rows()
+    rows["order_lines"][0]["unit_weight_kg"] = "0.001"
+    rows["order_lines"][0]["unit_volume_m3"] = "0.000001"
+    rows["vehicles"][0]["capacity_weight_kg"] = "0.002"
+    rows["vehicles"][0]["capacity_volume_m3"] = "0.000002"
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path, rows)
+    service = OperationalAllocationService(
+        create_session_factory(database), FixedAllocationTravel()
+    )
+    allocated = service.allocate(scenario, 1, "fine-precision")
+    assert allocated["decisions"][0]["center_id"] == "CD-001"
+    assert (
+        allocated["decisions"][0]["evidence"]["candidates"][0]["vehicle_checks"][0][
+            "capacity_compatible"
+        ]
+        is True
+    )
+
+
+def test_concurrent_allocations_cannot_overreserve_and_new_revision_keeps_holds(
+    database: Engine, tmp_path: Path
+) -> None:
+    rows = _publication_rows()
+    rows["order_lines"][0]["quantity"] = "5"
+    scenario, storage, services = _published_allocation_fixture(database, tmp_path, rows)
+    sessions = create_session_factory(database)
+    service = OperationalAllocationService(sessions, FixedAllocationTravel())
+    barrier = Barrier(2)
+
+    def compete(key: str) -> dict[str, object]:
+        barrier.wait(timeout=10)
+        return service.allocate(scenario, 1, key)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(compete, "competing-a")
+        second = pool.submit(compete, "competing-b")
+        results = [first.result(timeout=30), second.result(timeout=30)]
+    assert sorted(len(result["reservations"]) for result in results) == [0, 1]
+    assert {result["decisions"][0]["reason_code"] for result in results} == {
+        None,
+        "STOCK_NO_FULL_COVERAGE",
+    }
+    winner = next(result for result in results if result["reservations"])
+    with sessions() as session:
+        position = session.scalar(select(OperationalInventoryPositionModel))
+        assert position is not None and position.routeops_reserved_quantity == 5
+        assert position.available_quantity == 2
+    second_batch = _validated_publication_batch(scenario, "second", rows, services, storage)
+    revision, created = services[2].publish(scenario, second_batch)
+    assert created and revision["revision_no"] == 2
+    new_attempt = service.allocate(scenario, 2, "new-revision")
+    assert new_attempt["decisions"][0]["reason_code"] == "STOCK_NO_FULL_COVERAGE"
+    assert new_attempt["reservations"] == []
+    with sessions() as session:
+        position = session.scalar(select(OperationalInventoryPositionModel))
+        assert position is not None and position.routeops_reserved_quantity == 5
+        assert position.source_revision_id == UUID(revision["id"])
+        assert position.externally_reserved_quantity == 2
+    service.release(UUID(winner["id"]))
+    after_release = service.allocate(scenario, 2, "after-release")
+    assert len(after_release["reservations"]) == 1
+    assert after_release["decisions"][0]["center_id"] == "CD-001"
+    with pytest.raises(AllocationError, match="REVISION_NOT_CURRENT"):
+        service.allocate(scenario, 1, "old-revision")
+
+
+def test_concurrent_same_key_returns_one_attempt(database: Engine, tmp_path: Path) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    service = OperationalAllocationService(
+        create_session_factory(database), FixedAllocationTravel()
+    )
+    barrier = Barrier(2)
+
+    def retry() -> dict[str, object]:
+        barrier.wait(timeout=10)
+        return service.allocate(scenario, 1, "one-key")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = [pool.submit(retry) for _ in range(2)]
+        first, second = [future.result(timeout=30) for future in results]
+    assert first["id"] == second["id"]
+    with create_session_factory(database)() as session:
+        assert session.scalar(select(func.count()).select_from(AllocationAttemptModel)) == 1
+        assert session.scalar(select(func.count()).select_from(AllocationReservationLineModel)) == 1
+
+
+def test_database_stock_guard_rolls_back_partial_reservation(
+    database: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = _publication_rows()
+    rows["order_lines"].append({**rows["order_lines"][0], "sku": "SKU-2", "quantity": "3"})
+    rows["inventory"].append({**rows["inventory"][0], "sku": "SKU-2", "on_hand_quantity": "3"})
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path, rows)
+
+    def wrong_policy(*args: object, **kwargs: object) -> tuple[OrderAllocation, ...]:
+        return (OrderAllocation("ORD-001", "CD-001", None, {"sequence": 1}),)
+
+    monkeypatch.setattr(OperationalAllocationPolicy, "allocate", wrong_policy)
+    service = OperationalAllocationService(
+        create_session_factory(database), FixedAllocationTravel()
+    )
+    with pytest.raises(AllocationError, match="INVENTORY_CONCURRENT_CONFLICT"):
+        service.allocate(scenario, 1, "fault-injected")
+    with create_session_factory(database)() as session:
+        assert session.scalar(select(func.count()).select_from(AllocationAttemptModel)) == 0
+        assert (
+            session.scalar(select(func.count()).select_from(OperationalInventoryPositionModel)) == 0
+        )
+        assert session.scalar(select(func.count()).select_from(OperationalInventoryStateModel)) == 0
+
+
+def test_database_rejects_incomplete_selected_order(database: Engine, tmp_path: Path) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    service = OperationalAllocationService(
+        create_session_factory(database), FixedAllocationTravel()
+    )
+    valid = service.allocate(scenario, 1, "valid")
+    attempt_id = uuid4()
+    decision_id = uuid4()
+    started = datetime.now(UTC)
+    finished = started + timedelta(microseconds=1)
+    with pytest.raises(DBAPIError) as raised, database.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO allocation_attempts "
+                "(id,scenario_id,scenario_revision_id,inventory_snapshot_id,client_key,"
+                "policy_version,status,version,created_at,transitioned_at) "
+                "SELECT :id,scenario_id,scenario_revision_id,inventory_snapshot_id,'incomplete',"
+                "policy_version,'BUILDING',0,:started,:started "
+                "FROM allocation_attempts WHERE id=:source"
+            ),
+            {"id": attempt_id, "source": UUID(valid["id"]), "started": started},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO allocation_attempt_events "
+                "(id,attempt_id,sequence,from_status,to_status,occurred_at) "
+                "VALUES (:id,:attempt,0,NULL,'BUILDING',:started)"
+            ),
+            {"id": uuid4(), "attempt": attempt_id, "started": started},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO allocation_decision_snapshots "
+                "(attempt_id,inventory_sha256,inventory_data,created_at) "
+                "SELECT :attempt,inventory_sha256,inventory_data,:started "
+                "FROM allocation_decision_snapshots WHERE attempt_id=:source"
+            ),
+            {"attempt": attempt_id, "source": UUID(valid["id"]), "started": started},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO allocation_order_decisions "
+                "(id,attempt_id,order_id,center_source_id,reason_code,sequence,evidence) "
+                "SELECT :id,:attempt,order_id,center_source_id,reason_code,sequence,evidence "
+                "FROM allocation_order_decisions WHERE attempt_id=:source"
+            ),
+            {"id": decision_id, "attempt": attempt_id, "source": UUID(valid["id"])},
+        )
+        connection.execute(
+            text(
+                "UPDATE allocation_attempts SET status='HELD',version=1,transitioned_at=:finished "
+                "WHERE id=:attempt"
+            ),
+            {"attempt": attempt_id, "finished": finished},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO allocation_attempt_events "
+                "(id,attempt_id,sequence,from_status,to_status,occurred_at) "
+                "VALUES (:id,:attempt,1,'BUILDING','HELD',:finished)"
+            ),
+            {"id": uuid4(), "attempt": attempt_id, "finished": finished},
+        )
+    assert getattr(raised.value.orig, "sqlstate", None) == "23514"
+    with create_session_factory(database)() as session:
+        assert session.scalar(select(func.count()).select_from(AllocationAttemptModel)) == 1
+
+
+def test_new_revision_cannot_reconcile_below_active_holds(database: Engine, tmp_path: Path) -> None:
+    rows = _publication_rows()
+    rows["order_lines"][0]["quantity"] = "5"
+    scenario, storage, services = _published_allocation_fixture(database, tmp_path, rows)
+    sessions = create_session_factory(database)
+    service = OperationalAllocationService(sessions, FixedAllocationTravel())
+    held = service.allocate(scenario, 1, "held")
+    reduced = _publication_rows()
+    reduced["inventory"][0]["on_hand_quantity"] = "6"
+    batch = _validated_publication_batch(scenario, "reduced", reduced, services, storage)
+    revision, _ = services[2].publish(scenario, batch)
+    with pytest.raises(AllocationError, match="INVENTORY_RECONCILIATION_CONFLICT"):
+        service.allocate(scenario, 2, "should-fail")
+    with sessions() as session:
+        state = session.get(OperationalInventoryStateModel, scenario)
+        assert state is not None and state.active_revision_id == UUID(held["scenario_revision_id"])
+        assert session.scalar(select(func.count()).select_from(AllocationAttemptModel)) == 1
+    service.release(UUID(held["id"]))
+    retry = service.allocate(scenario, 2, "after-release")
+    assert retry["inventory_snapshot"]["scenario_revision_id"] == revision["id"]
+
+
+def test_routing_failure_rolls_back_activation_and_does_not_claim_stock_failure(
+    database: Engine, tmp_path: Path
+) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    sessions = create_session_factory(database)
+    service = OperationalAllocationService(sessions, FailedAllocationTravel())
+    with pytest.raises(AllocationError, match="ROUTING_DEPENDENCY_FAILED"):
+        service.allocate(scenario, 1, "failed-osrm")
+    with sessions() as session:
+        assert session.scalar(select(func.count()).select_from(OperationalInventoryStateModel)) == 0
+        assert (
+            session.scalar(select(func.count()).select_from(OperationalInventoryPositionModel)) == 0
+        )
+        assert session.scalar(select(func.count()).select_from(AllocationAttemptModel)) == 0
+        assert (
+            session.scalar(select(func.count()).select_from(AllocationDecisionSnapshotModel)) == 0
+        )
+
+
+def test_operational_migration_downgrade_removes_only_new_empty_objects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with temporary_database() as url:
+        migrate(monkeypatch, url, "7a69c4d10e32")
+        engine = create_engine(url)
+        try:
+            with engine.connect() as connection:
+                before = connection.scalar(text(TRIGGER_COUNT_SQL))
+                postgis_oid = connection.scalar(
+                    text("SELECT oid FROM pg_extension WHERE extname='postgis'")
+                )
+            migrate(monkeypatch, url, "head")
+            with engine.connect() as connection:
+                assert connection.scalar(text(TRIGGER_COUNT_SQL)) == before + 10
+            command.downgrade(Config(str(ALEMBIC_INI)), "7a69c4d10e32")
+            with engine.connect() as connection:
+                assert connection.scalar(text(TRIGGER_COUNT_SQL)) == before
+                assert (
+                    connection.scalar(text("SELECT oid FROM pg_extension WHERE extname='postgis'"))
+                    == postgis_oid
+                )
+        finally:
+            engine.dispose()

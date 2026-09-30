@@ -9,6 +9,7 @@ from geoalchemy2 import Geometry
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
+    Computed,
     Date,
     DateTime,
     ForeignKey,
@@ -692,4 +693,191 @@ class InventorySnapshotLineModel(Base):
             name="ck_inventory_snapshot_lines_available",
         ),
         Index("ix_inventory_snapshot_lines_revision_sku", "scenario_revision_id", "sku"),
+    )
+
+
+class OperationalInventoryStateModel(Base):
+    __tablename__ = "operational_inventory_state"
+
+    scenario_id: Mapped[UUID] = mapped_column(
+        ForeignKey("scenarios.id", ondelete="RESTRICT"), primary_key=True
+    )
+    active_revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("scenario_revisions.id", ondelete="RESTRICT"), nullable=False
+    )
+    snapshot_id: Mapped[UUID] = mapped_column(
+        ForeignKey("inventory_snapshots.id", ondelete="RESTRICT"), nullable=False
+    )
+    activated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class OperationalInventoryPositionModel(Base):
+    __tablename__ = "operational_inventory_positions"
+
+    scenario_id: Mapped[UUID] = mapped_column(
+        ForeignKey("scenarios.id", ondelete="RESTRICT"), primary_key=True
+    )
+    center_source_id: Mapped[str] = mapped_column(String(100, collation="C"), primary_key=True)
+    sku: Mapped[str] = mapped_column(String(100, collation="C"), primary_key=True)
+    source_revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("scenario_revisions.id", ondelete="RESTRICT"), nullable=False
+    )
+    source_snapshot_line_id: Mapped[UUID] = mapped_column(
+        ForeignKey("inventory_snapshot_lines.id", ondelete="RESTRICT"), nullable=False
+    )
+    on_hand_quantity: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    externally_reserved_quantity: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    safety_stock_quantity: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    routeops_reserved_quantity: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    available_quantity: Mapped[int] = mapped_column(
+        BigInteger,
+        Computed(
+            "on_hand_quantity - externally_reserved_quantity - "
+            "safety_stock_quantity - routeops_reserved_quantity",
+            persisted=True,
+        ),
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "on_hand_quantity >= 0 AND externally_reserved_quantity >= 0 "
+            "AND safety_stock_quantity >= 0 AND routeops_reserved_quantity >= 0 "
+            "AND externally_reserved_quantity + safety_stock_quantity + "
+            "routeops_reserved_quantity <= on_hand_quantity",
+            name="ck_operational_inventory_available",
+        ),
+        Index("ix_operational_inventory_source", "source_revision_id", "source_snapshot_line_id"),
+    )
+
+
+class AllocationAttemptModel(Base):
+    __tablename__ = "allocation_attempts"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    scenario_id: Mapped[UUID] = mapped_column(
+        ForeignKey("scenarios.id", ondelete="RESTRICT"), nullable=False
+    )
+    scenario_revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("scenario_revisions.id", ondelete="RESTRICT"), nullable=False
+    )
+    inventory_snapshot_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    client_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    transitioned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["scenario_revision_id", "inventory_snapshot_id"],
+            ["inventory_snapshots.scenario_revision_id", "inventory_snapshots.id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("scenario_revision_id", "client_key", name="uq_allocation_attempt_key"),
+        CheckConstraint("length(client_key) BETWEEN 1 AND 100", name="ck_allocation_attempt_key"),
+        CheckConstraint(
+            "status IN ('BUILDING','HELD','CONFIRMED','RELEASED')",
+            name="ck_allocation_attempt_status",
+        ),
+        CheckConstraint("version >= 0", name="ck_allocation_attempt_version"),
+        Index("ix_allocation_attempts_revision", "scenario_revision_id", "created_at"),
+    )
+
+
+class AllocationDecisionSnapshotModel(Base):
+    __tablename__ = "allocation_decision_snapshots"
+
+    attempt_id: Mapped[UUID] = mapped_column(
+        ForeignKey("allocation_attempts.id", ondelete="RESTRICT"), primary_key=True
+    )
+    inventory_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    inventory_data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("inventory_sha256 ~ '^[0-9a-f]{64}$'", name="ck_allocation_snapshot_hash"),
+    )
+
+
+class AllocationOrderDecisionModel(Base):
+    __tablename__ = "allocation_order_decisions"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    attempt_id: Mapped[UUID] = mapped_column(
+        ForeignKey("allocation_attempts.id", ondelete="RESTRICT"), nullable=False
+    )
+    order_id: Mapped[UUID] = mapped_column(
+        ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False
+    )
+    center_source_id: Mapped[str | None] = mapped_column(String(100, collation="C"))
+    reason_code: Mapped[str | None] = mapped_column(String(60))
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("attempt_id", "order_id", name="uq_allocation_decision_order"),
+        UniqueConstraint("attempt_id", "sequence", name="uq_allocation_decision_sequence"),
+        CheckConstraint("sequence > 0", name="ck_allocation_decision_sequence"),
+        CheckConstraint(
+            "(center_source_id IS NULL) = (reason_code IS NOT NULL)",
+            name="ck_allocation_decision_outcome",
+        ),
+    )
+
+
+class AllocationReservationLineModel(Base):
+    __tablename__ = "allocation_reservation_lines"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    attempt_id: Mapped[UUID] = mapped_column(
+        ForeignKey("allocation_attempts.id", ondelete="RESTRICT"), nullable=False
+    )
+    decision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("allocation_order_decisions.id", ondelete="RESTRICT"), nullable=False
+    )
+    order_line_id: Mapped[UUID] = mapped_column(
+        ForeignKey("order_lines.id", ondelete="RESTRICT"), nullable=False
+    )
+    scenario_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    center_source_id: Mapped[str] = mapped_column(String(100, collation="C"), nullable=False)
+    sku: Mapped[str] = mapped_column(String(100, collation="C"), nullable=False)
+    quantity: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["scenario_id", "center_source_id", "sku"],
+            [
+                "operational_inventory_positions.scenario_id",
+                "operational_inventory_positions.center_source_id",
+                "operational_inventory_positions.sku",
+            ],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "attempt_id", "order_line_id", name="uq_allocation_reservation_order_line"
+        ),
+        CheckConstraint("quantity > 0", name="ck_allocation_reservation_quantity"),
+        Index("ix_allocation_reservations_position", "scenario_id", "center_source_id", "sku"),
+    )
+
+
+class AllocationAttemptEventModel(Base):
+    __tablename__ = "allocation_attempt_events"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    attempt_id: Mapped[UUID] = mapped_column(
+        ForeignKey("allocation_attempts.id", ondelete="RESTRICT"), nullable=False
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    from_status: Mapped[str | None] = mapped_column(String(20))
+    to_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    actor: Mapped[str | None] = mapped_column(String(100))
+    reason: Mapped[str | None] = mapped_column(String(500))
+
+    __table_args__ = (
+        UniqueConstraint("attempt_id", "sequence", name="uq_allocation_event_sequence"),
+        CheckConstraint("sequence >= 0", name="ck_allocation_event_sequence"),
     )
