@@ -184,6 +184,38 @@ class ImportFileModel(Base):
     )
 
 
+class ImportBatchExpirationModel(Base):
+    __tablename__ = "import_batch_expirations"
+
+    batch_id: Mapped[UUID] = mapped_column(
+        ForeignKey("import_batches.id", ondelete="RESTRICT"), primary_key=True
+    )
+    expired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[str] = mapped_column(String(40), nullable=False)
+
+    __table_args__ = (CheckConstraint("reason = 'RETENTION'", name="ck_batch_expiration_reason"),)
+
+
+class ImportFileDeletionModel(Base):
+    __tablename__ = "import_file_deletions"
+
+    file_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    batch_id: Mapped[UUID] = mapped_column(
+        ForeignKey("import_batch_expirations.batch_id", ondelete="RESTRICT"), nullable=False
+    )
+    deleted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[str] = mapped_column(String(40), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["batch_id", "file_id"],
+            ["import_files.batch_id", "import_files.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("reason = 'RETENTION'", name="ck_file_deletion_reason"),
+    )
+
+
 class ImportBatchEventModel(Base):
     __tablename__ = "import_batch_events"
 

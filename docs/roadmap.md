@@ -42,6 +42,10 @@ Deliverables:
   route map, unassigned list, and first KPIs.
 - Backend unit/contract/integration tests, frontend component test, and one
   cross-stack smoke test.
+- Preserve the synthetic `ORD-003` regression: it requires 20 units of
+  `SKU-C`, while each center has only 5 available after safety stock. Its
+  `STOCK_NO_FULL_COVERAGE` result is correct; this fixture must not be changed
+  to demonstrate another allocation problem.
 
 Acceptance criteria:
 
@@ -63,8 +67,40 @@ Approved delivery sequence (2026-09-28):
 2. **2.2:** persistent model, migrations, and immutable scenario/import revisions.
 3. **2.3:** provisional upload, error report, atomic publication, and interface.
 4. **2.4:** deterministic center assignment and transactional RouteOps reservations.
-5. **2.5:** execution, history, run interface, and measured VROOM workload limit.
-6. **2.6:** integrated acceptance, concurrency, and recovery tests.
+5. **2.5:** execution, history, run interface, multiple-demo selection, and
+   measured VROOM workload limit.
+6. **2.6:** integrated acceptance, concurrency, recovery, and demo presentation.
+
+Assignment demos and phase boundaries:
+
+- **2.4 — synthetic data and evaluation:** (1) stock exclusive to different
+  centers, including an order whose lines no single center can cover;
+  (2) an order eligible at several centers, with the chosen origin and rejected
+  candidates recorded; (3) shared stock plus an order whose SKU coverage exists
+  at only one center, where assigning a flexible order first to its nearer
+  center makes the restricted order fail despite a feasible joint assignment;
+  (4) stock-covered orders
+  blocked by vehicle capacity or required skills. Keep `ORD-003` as a separate
+  stock-coverage regression. Each demo has deterministic inputs, expected
+  decisions, exception reasons, and automated assertions.
+- **2.4 — assignment policy:** orders need not name an origin. RouteOps chooses
+  one center that can cover every line, checks compatible fleet, records the
+  candidates and reason for its deterministic tie break, and reserves stock
+  before constructing solver tasks. Add a test that makes the current
+  `greedy-v1` policy strand the restricted order even though assigning the
+  flexible order to another center would cover both. Evaluate an auditable
+  improvement that considers the remaining orders' alternatives or scarcity;
+  compare it with `greedy-v1` on the same fixture. Do not describe either
+  policy as globally optimal without proof.
+- **2.5–2.6 — user experience:** select and run several synthetic demos and
+  show each order's assigned center, considered centers, and explicit exception
+  reasons alongside the route result. Integration and acceptance tests verify
+  that the displayed decision matches persisted evidence.
+- **Milestone 3 — comparison:** compare assignment strategies across demos
+  using delivered orders, exceptions, route cost, and fleet use under the same
+  stock and OSRM assumptions; report tradeoffs and workload limits. The basic
+  origin decision remains in 2.4. VROOM remains reachable only through
+  `SolverGateway`.
 
 See [the 2.1 contract](milestone-2-1-import-validation.md). Processing runs
 stale for more than a configurable 30 minutes will be recovered idempotently
@@ -89,6 +125,8 @@ Acceptance criteria:
   reason; no partial stock reservation survives a rollback.
 - Retrying an idempotent request neither duplicates reservations nor runs.
 - Snapshot and allocation evidence can reconstruct each decision.
+- The restricted-order demo exposes the current greedy limitation, and the
+  evaluated replacement remains deterministic and auditable.
 
 ## Milestone 3 — operation and analytics
 
@@ -99,6 +137,8 @@ Deliverables:
 - Layered unassigned explanation with certainty/evidence.
 - Full KPI catalog and CSV/`.xlsx` exports.
 - Richer route, utilization, comparison, and diagnostic UI.
+- Global comparison of assignment strategies and their outcomes on the
+  synthetic demo suite, without an unsupported optimality claim.
 
 Acceptance criteria:
 

@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 
 from routeops.api.logging import configure_logging
+from routeops.application.import_upload import UploadError, receive_package
 from routeops.application.planning import DemoPlanningService
 from routeops.domain.optimization import SolutionQuality
 from routeops.domain.policies.allocation import DeterministicAllocationPolicy
@@ -24,6 +25,8 @@ from routeops.infrastructure.persistence import (
     create_database_engine,
     create_session_factory,
 )
+from routeops.infrastructure.persistence.import_upload_repository import UploadService
+from routeops.infrastructure.persistence.planning_data_repository import ScenarioRepository
 from routeops.infrastructure.routing.errors import RoutingDependencyError
 from routeops.infrastructure.routing.osrm import OsrmClient
 from routeops.infrastructure.solver import VroomAdapter
@@ -32,6 +35,7 @@ from routeops.infrastructure.solver.errors import (
     SolverInputError,
     SolverResponseError,
 )
+from routeops.infrastructure.storage import LocalObjectStorage
 
 settings = Settings.from_environment()
 configure_logging(settings.log_level)
@@ -39,6 +43,11 @@ logger = logging.getLogger("routeops.api")
 engine = create_database_engine(settings.database_url)
 sessions = create_session_factory(engine)
 repository = DatabaseRunRepository(sessions)
+scenario_repository = ScenarioRepository(sessions)
+object_storage = LocalObjectStorage(settings.import_storage_root)
+upload_service = UploadService(
+    sessions, object_storage, retention_days=settings.import_retention_days
+)
 osrm = OsrmClient(
     settings.osrm_url,
     settings.http_connect_timeout_seconds,
@@ -76,12 +85,24 @@ app.add_middleware(
     allow_origins=list(settings.cors_origins),
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Request-ID"],
+    allow_headers=["Content-Type", "X-Request-ID", "Idempotency-Key"],
 )
 
 
 class CreateDemoRunRequest(BaseModel):
     solution_quality: SolutionQuality = SolutionQuality.BALANCED
+
+
+class CreateScenarioRequest(BaseModel):
+    name: str
+
+
+@app.exception_handler(UploadError)
+def upload_error(_: Request, exc: UploadError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"code": exc.code, "detail": "Import upload could not be accepted."},
+    )
 
 
 @app.middleware("http")
@@ -174,15 +195,48 @@ def dependencies(response: Response) -> dict[str, object]:
 @app.get("/health/ready", tags=["health"])
 def ready(response: Response) -> dict[str, str]:
     is_ready, _ = dependency_status()
-    response.status_code = (
-        status.HTTP_200_OK if is_ready else status.HTTP_503_SERVICE_UNAVAILABLE
-    )
+    response.status_code = status.HTTP_200_OK if is_ready else status.HTTP_503_SERVICE_UNAVAILABLE
     return {"status": "ready" if is_ready else "not_ready"}
 
 
 @app.post("/api/v1/demo/runs", status_code=status.HTTP_201_CREATED, tags=["planning"])
 def create_demo_run(request: CreateDemoRunRequest) -> dict[str, object]:
     return planning.run(request.solution_quality)
+
+
+@app.post("/api/v1/scenarios", status_code=status.HTTP_201_CREATED, tags=["imports"])
+def create_scenario(request: CreateScenarioRequest) -> dict[str, str]:
+    try:
+        scenario_id = scenario_repository.create(request.name)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail="Scenario name must contain 1 to 200 characters"
+        ) from exc
+    return {"id": str(scenario_id), "name": request.name.strip()}
+
+
+@app.post("/api/v1/scenarios/{scenario_id}/imports", tags=["imports"])
+async def upload_import(
+    scenario_id: UUID, request: Request, response: Response
+) -> dict[str, object]:
+    client_key = upload_service.validate_client_key(request.headers.get("Idempotency-Key"))
+    if not upload_service.scenario_exists(scenario_id):
+        raise HTTPException(status_code=404, detail="Active scenario was not found")
+    package = await receive_package(request, object_storage, settings.import_limits)
+    batch_id, created = upload_service.create(scenario_id, client_key, package)
+    response.status_code = 201 if created else 200
+    result = upload_service.get(scenario_id, batch_id)
+    if result is None:
+        raise RuntimeError("created import batch cannot be read")
+    return result
+
+
+@app.get("/api/v1/scenarios/{scenario_id}/imports/{batch_id}", tags=["imports"])
+def get_import(scenario_id: UUID, batch_id: UUID) -> dict[str, object]:
+    result = upload_service.get(scenario_id, batch_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Import batch was not found")
+    return result
 
 
 @app.get("/api/v1/runs/latest", tags=["planning"])

@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-routeops}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -43,7 +43,7 @@ services:
     volumes:
       - ./data/osrm:/data:ro
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     restart: unless-stopped
 
   vroom:
@@ -54,7 +54,7 @@ services:
     volumes:
       - ./infrastructure/vroom/config.yml:/conf/config.yml:ro
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - osrm
     healthcheck:
@@ -79,17 +79,43 @@ services:
       ROUTEOPS_HTTP_READ_TIMEOUT_SECONDS: ${ROUTEOPS_HTTP_READ_TIMEOUT_SECONDS:-20}
       ROUTEOPS_CORS_ORIGINS: ${ROUTEOPS_CORS_ORIGINS:-http://localhost:5173}
       ROUTEOPS_MAP_DATASET_SHA256: ${ROUTEOPS_MAP_DATASET_SHA256:-22230c1c093a0fe50bbb240cce3d2c36aaf34e8bfb2fe136b76405084de213c4}
+      ROUTEOPS_IMPORT_STORAGE_ROOT: /app/private-imports
+      ROUTEOPS_IMPORT_MAX_FILE_BYTES: ${ROUTEOPS_IMPORT_MAX_FILE_BYTES:-20971520}
+      ROUTEOPS_IMPORT_MAX_PACKAGE_BYTES: ${ROUTEOPS_IMPORT_MAX_PACKAGE_BYTES:-104857600}
+      ROUTEOPS_IMPORT_RETENTION_DAYS: ${ROUTEOPS_IMPORT_RETENTION_DAYS:-30}
+      ROUTEOPS_IMPORT_ORPHAN_GRACE_SECONDS: ${ROUTEOPS_IMPORT_ORPHAN_GRACE_SECONDS:-3600}
+    volumes:
+      - import-originals:/app/private-imports
     command:
       - /bin/sh
       - -ec
       - alembic upgrade head && uvicorn routeops.api.main:app --host 0.0.0.0 --port 8000
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       database:
         condition: service_healthy
       vroom:
         condition: service_healthy
+    restart: unless-stopped
+
+  import-maintenance:
+    build:
+      context: ./backend
+    environment:
+      ROUTEOPS_DATABASE_URL: ${ROUTEOPS_DATABASE_URL:?Set ROUTEOPS_DATABASE_URL in .env}
+      ROUTEOPS_IMPORT_STORAGE_ROOT: /app/private-imports
+      ROUTEOPS_IMPORT_RETENTION_DAYS: ${ROUTEOPS_IMPORT_RETENTION_DAYS:-30}
+      ROUTEOPS_IMPORT_ORPHAN_GRACE_SECONDS: ${ROUTEOPS_IMPORT_ORPHAN_GRACE_SECONDS:-3600}
+      ROUTEOPS_IMPORT_MAINTENANCE_INTERVAL_SECONDS: ${ROUTEOPS_IMPORT_MAINTENANCE_INTERVAL_SECONDS:-3600}
+    volumes:
+      - import-originals:/app/private-imports
+    command: ["python", "-m", "routeops.infrastructure.storage.maintenance", "--loop"]
+    depends_on:
+      database:
+        condition: service_healthy
+      backend:
+        condition: service_started
     restart: unless-stopped
 
   frontend:
@@ -98,7 +124,7 @@ services:
     environment:
       BACKEND_PROXY_TARGET: http://backend:8000
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     depends_on:
       - backend
     restart: unless-stopped
@@ -109,3 +135,4 @@ configs:
 
 volumes:
   postgres-data:
+  import-originals:

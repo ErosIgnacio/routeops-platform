@@ -6,7 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN addgroup --system routeops && adduser --system --ingroup routeops routeops
+RUN addgroup --system routeops && adduser --system --ingroup routeops routeops \
+    && mkdir -p /app/private-imports \
+    && chown routeops:routeops /app/private-imports \
+    && chmod 700 /app/private-imports
 
 COPY requirements.lock.txt ./
 RUN pip install --no-cache-dir --requirement requirements.lock.txt

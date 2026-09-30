@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
+from threading import Barrier, Lock
 from uuid import UUID, uuid4
 
 import pytest
@@ -19,10 +22,15 @@ from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
+from routeops.application.import_contract import DATASETS
+from routeops.application.import_upload import ReceivedFile, ReceivedPackage, UploadError
+from routeops.infrastructure.persistence.import_upload_repository import UploadService
 from routeops.infrastructure.persistence.models import (
     DistributionCenterModel,
     ImportBatchEventModel,
+    ImportBatchExpirationModel,
     ImportBatchModel,
+    ImportFileDeletionModel,
     ImportFileModel,
     InventorySnapshotLineModel,
     InventorySnapshotModel,
@@ -40,6 +48,8 @@ from routeops.infrastructure.persistence.planning_data_repository import (
 )
 from routeops.infrastructure.persistence.repository import DatabaseRunRepository
 from routeops.infrastructure.persistence.session import create_session_factory
+from routeops.infrastructure.storage import LocalObjectStorage
+from routeops.infrastructure.storage.maintenance import ImportStorageMaintenance
 
 pytestmark = pytest.mark.integration
 ALEMBIC_INI = Path(__file__).resolve().parents[2] / "alembic.ini"
@@ -553,7 +563,7 @@ def test_complete_transaction_retry_boundary_and_revision_isolation(database: En
 
 def test_allowed_downgrade_removes_routeops_objects_only(monkeypatch: pytest.MonkeyPatch) -> None:
     with temporary_database() as url:
-        migrate(monkeypatch, url, "head")
+        migrate(monkeypatch, url, "525a2c8f3a8c")
         engine = create_engine(url)
         with engine.connect() as connection:
             extension_oid = connection.scalar(
@@ -761,7 +771,7 @@ def test_revisions_keys_links_and_downgrade_guard(
     with pytest.raises(RuntimeError, match="downgrade blocked"):
         command.downgrade(Config(str(ALEMBIC_INI)), "20260924_0001")
     with database.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "525a2c8f3a8c"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "8db12e7c5f09"
 
 
 def test_quantities_costs_geometry_and_immutability(database: Engine) -> None:
@@ -918,3 +928,345 @@ def test_batch_state_events_and_skills(database: Engine) -> None:
     assert normalize_skills("Cold|fragile|cold") == ["cold", "fragile"]
     with pytest.raises(ValueError):
         normalize_skills("bad skill")
+
+
+def _stored_package(storage: LocalObjectStorage, *, suffix: bytes = b"") -> ReceivedPackage:
+    files: list[ReceivedFile] = []
+    for dataset in DATASETS:
+        writer = storage.begin()
+        writer.write(dataset.encode("ascii") + suffix)
+        files.append(ReceivedFile(dataset, f"{dataset}.csv", writer.finish()))
+    manifest = hashlib.sha256()
+    for item in sorted(files, key=lambda file: file.dataset):
+        manifest.update(
+            f"{item.dataset}\0{item.object.sha256}\0{item.object.size_bytes}\n".encode("ascii")
+        )
+    return ReceivedPackage(tuple(files), manifest.hexdigest())
+
+
+def test_concurrent_same_key_upload_has_one_batch_and_no_extra_objects(
+    database: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path)
+    scenario_id = ScenarioRepository(sessions).create("Concurrent upload")
+    service = UploadService(sessions, storage)
+    packages = (_stored_package(storage), _stored_package(storage))
+    barrier = Barrier(2)
+    lock = Lock()
+    calls = 0
+    original_existing = service._existing
+
+    def both_observe_missing(scenario: UUID, key: str) -> ImportBatchModel | None:
+        nonlocal calls
+        result = original_existing(scenario, key)
+        with lock:
+            calls += 1
+            first_lookup = calls <= 2
+        if first_lookup:
+            assert result is None
+            barrier.wait(timeout=10)
+        return result
+
+    monkeypatch.setattr(service, "_existing", both_observe_missing)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [
+            pool.submit(service.create, scenario_id, "concurrent-key", package)
+            for package in packages
+        ]
+        results = [future.result(timeout=15) for future in futures]
+    assert len({batch_id for batch_id, _ in results}) == 1
+    assert sorted(created for _, created in results) == [False, True]
+    batch_id = results[0][0]
+    with sessions() as session:
+        assert (
+            len(
+                list(
+                    session.scalars(
+                        select(ImportBatchModel).where(
+                            ImportBatchModel.scenario_id == scenario_id,
+                            ImportBatchModel.client_key == "concurrent-key",
+                        )
+                    )
+                )
+            )
+            == 1
+        )
+        assert (
+            len(
+                list(
+                    session.scalars(
+                        select(ImportFileModel).where(ImportFileModel.batch_id == batch_id)
+                    )
+                )
+            )
+            == 5
+        )
+        events = list(
+            session.scalars(
+                select(ImportBatchEventModel).where(ImportBatchEventModel.batch_id == batch_id)
+            )
+        )
+    assert [(event.sequence, event.to_status) for event in events] == [(1, "RECEIVED")]
+    assert len(list(storage.object_keys())) == 5
+    assert list(storage.temporary_keys()) == []
+    with pytest.raises(UploadError) as caught:
+        service.create(scenario_id, "concurrent-key", _stored_package(storage, suffix=b"other"))
+    assert caught.value.code == "IDEMPOTENCY_CONFLICT"
+    assert len(list(storage.object_keys())) == 5
+
+
+def test_sql_failure_is_recovered_even_if_immediate_cleanup_fails(
+    database: Engine, tmp_path: Path
+) -> None:
+    class FailingDeleteStorage(LocalObjectStorage):
+        fail_delete = True
+
+        def delete(self, key: str) -> None:
+            if self.fail_delete:
+                raise OSError("simulated cleanup interruption")
+            super().delete(key)
+
+    sessions = create_session_factory(database)
+    storage = FailingDeleteStorage(tmp_path)
+    package = _stored_package(storage)
+    service = UploadService(sessions, storage)
+    with pytest.raises(DBAPIError):
+        service.create(uuid4(), "orphaned-upload", package)
+    with sessions() as session:
+        assert (
+            session.scalar(
+                select(ImportBatchModel).where(ImportBatchModel.client_key == "orphaned-upload")
+            )
+            is None
+        )
+        assert (
+            session.scalar(
+                select(ImportFileModel).where(
+                    ImportFileModel.storage_key == package.files[0].object.key
+                )
+            )
+            is None
+        )
+    assert len(list(storage.object_keys())) == 5
+    storage.fail_delete = False
+    past = (datetime.now(UTC) - timedelta(hours=2)).timestamp()
+    for key, _ in storage.object_keys():
+        os.utime(storage.objects / key, (past, past))
+    maintenance = ImportStorageMaintenance(
+        sessions, storage, retention_days=30, orphan_grace_seconds=3600
+    )
+    assert maintenance.run_once() == (0, 0, 5)
+    assert list(storage.object_keys()) == []
+
+
+def test_private_upload_transaction_retry_and_gateway(database: Engine, tmp_path: Path) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path)
+    scenario_id = ScenarioRepository(sessions).create("Import test")
+    service = UploadService(sessions, storage)
+    first = _stored_package(storage)
+    batch_id, created = service.create(scenario_id, "same-key", first)
+    assert created
+    metadata = service.get(scenario_id, batch_id)
+    assert metadata is not None
+    assert metadata["status"] == "RECEIVED"
+    assert len(metadata["files"]) == 5  # type: ignore[arg-type]
+    with sessions() as session:
+        files = list(
+            session.scalars(select(ImportFileModel).where(ImportFileModel.batch_id == batch_id))
+        )
+        events = list(
+            session.scalars(
+                select(ImportBatchEventModel).where(ImportBatchEventModel.batch_id == batch_id)
+            )
+        )
+    assert [(event.sequence, event.to_status) for event in events] == [(1, "RECEIVED")]
+    for file in files:
+        with storage.open(file.storage_key) as stream:
+            assert stream.read() == file.dataset.encode("ascii")
+    duplicate = _stored_package(storage)
+    assert service.create(scenario_id, "same-key", duplicate) == (batch_id, False)
+    assert len(list(storage.object_keys())) == 5
+    conflicting = _stored_package(storage, suffix=b"changed")
+    with pytest.raises(UploadError) as caught:
+        service.create(scenario_id, "same-key", conflicting)
+    assert caught.value.code == "IDEMPOTENCY_CONFLICT"
+    assert len(list(storage.object_keys())) == 5
+    failed = _stored_package(storage)
+    with pytest.raises(DBAPIError):
+        service.create(uuid4(), "missing-scenario", failed)
+    assert len(list(storage.object_keys())) == 5
+
+
+def test_retention_audit_and_orphan_recovery(database: Engine, tmp_path: Path) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path)
+    scenario_id = ScenarioRepository(sessions).create("Expired import")
+    batch_id = uuid4()
+    file_id = uuid4()
+    old = datetime.now(UTC) - timedelta(days=31)
+    writer = storage.begin()
+    writer.write(b"original")
+    stored = writer.finish()
+    with sessions.begin() as session:
+        session.add(
+            ImportBatchModel(
+                id=batch_id,
+                scenario_id=scenario_id,
+                client_key="expired-key",
+                package_sha256=SHA,
+                parser_version="2.1",
+                status="RECEIVED",
+                version=1,
+                created_at=old,
+                transitioned_at=old,
+            )
+        )
+        session.flush()
+        session.add(
+            ImportBatchEventModel(
+                id=uuid4(),
+                batch_id=batch_id,
+                sequence=1,
+                from_status=None,
+                to_status="RECEIVED",
+                occurred_at=old,
+            )
+        )
+        session.add(
+            ImportFileModel(
+                id=file_id,
+                batch_id=batch_id,
+                dataset="workbook",
+                display_name="book.xlsx",
+                storage_key=stored.key,
+                sha256=stored.sha256,
+                size_bytes=stored.size_bytes,
+                created_at=old,
+            )
+        )
+    service = UploadService(sessions, storage)
+    overdue = service.get(scenario_id, batch_id)
+    assert overdue is not None
+    assert overdue["status"] == "EXPIRED"
+    assert overdue["expired_at"] is None
+    assert overdue["expires_at"] is not None
+    with pytest.raises(UploadError) as overdue_retry:
+        service.create(scenario_id, "expired-key", _stored_package(storage))
+    assert overdue_retry.value.code == "BATCH_EXPIRED"
+
+    published_batch_id = uuid4()
+    published_file_id = uuid4()
+    published_old = datetime(2026, 8, 1, 12, tzinfo=UTC)
+    published_writer = storage.begin()
+    published_writer.write(b"published-original")
+    published_object = published_writer.finish()
+    with sessions.begin() as session:
+        published_batch = ImportBatchModel(
+            id=published_batch_id,
+            scenario_id=scenario_id,
+            client_key="published-key",
+            package_sha256=SHA,
+            parser_version="2.1",
+            status="RECEIVED",
+            version=1,
+            created_at=published_old,
+            transitioned_at=published_old,
+        )
+        session.add(published_batch)
+        session.flush()
+        session.add(
+            ImportBatchEventModel(
+                id=uuid4(),
+                batch_id=published_batch_id,
+                sequence=1,
+                from_status=None,
+                to_status="RECEIVED",
+                occurred_at=published_old,
+            )
+        )
+        session.add(
+            ImportFileModel(
+                id=published_file_id,
+                batch_id=published_batch_id,
+                dataset="workbook",
+                display_name="published.xlsx",
+                storage_key=published_object.key,
+                sha256=published_object.sha256,
+                size_bytes=published_object.size_bytes,
+                created_at=published_old,
+            )
+        )
+        session.flush()
+        for sequence, before, after in (
+            (2, "RECEIVED", "VALIDATING"),
+            (3, "VALIDATING", "VALID"),
+            (4, "VALID", "PUBLISHED"),
+        ):
+            changed_at = published_old + timedelta(seconds=sequence)
+            published_batch.status = after
+            published_batch.version = sequence
+            published_batch.transitioned_at = changed_at
+            session.add(
+                ImportBatchEventModel(
+                    id=uuid4(),
+                    batch_id=published_batch_id,
+                    sequence=sequence,
+                    from_status=before,
+                    to_status=after,
+                    occurred_at=changed_at,
+                )
+            )
+            session.flush()
+        session.add(
+            ScenarioRevisionModel(
+                id=uuid4(),
+                scenario_id=scenario_id,
+                import_batch_id=published_batch_id,
+                revision_no=1,
+                planning_date=date(2026, 8, 1),
+                timezone_iana="America/Santiago",
+                currency="CLP",
+                horizon_start_at=published_old,
+                horizon_end_at=published_old + timedelta(hours=8),
+                operational_area=None,
+                content_sha256=SHA,
+                contract_version="1",
+                published_at=published_old + timedelta(seconds=4),
+            )
+        )
+    orphan = storage.begin()
+    orphan.write(b"orphan")
+    orphan_key = orphan.finish().key
+    temporary_key = uuid4().hex
+    (storage.temporary / temporary_key).write_bytes(b"interrupted")
+    past = (datetime.now(UTC) - timedelta(hours=2)).timestamp()
+    os.utime(storage.objects / orphan_key, (past, past))
+    os.utime(storage.temporary / temporary_key, (past, past))
+    maintenance = ImportStorageMaintenance(
+        sessions, storage, retention_days=30, orphan_grace_seconds=3600
+    )
+    assert maintenance.run_once() == (1, 1, 2)
+    assert maintenance.run_once() == (0, 0, 0)
+    with sessions() as session:
+        assert session.get(ImportBatchExpirationModel, batch_id) is not None
+        assert session.get(ImportFileDeletionModel, file_id) is not None
+        assert session.get(ImportFileModel, file_id) is not None
+        assert session.get(ImportBatchModel, batch_id).status == "RECEIVED"  # type: ignore[union-attr]
+        assert session.get(ImportBatchExpirationModel, published_batch_id) is None
+        assert session.get(ImportFileDeletionModel, published_file_id) is None
+    published = service.get(scenario_id, published_batch_id)
+    assert published is not None and published["status"] == "PUBLISHED"
+    with storage.open(published_object.key) as stream:
+        assert stream.read() == b"published-original"
+    with pytest.raises(FileNotFoundError), storage.open(stored.key):
+        pass
+    expired = service.get(scenario_id, batch_id)
+    assert expired is not None and expired["status"] == "EXPIRED"
+    assert expired["expired_at"] is not None
+    with pytest.raises(UploadError) as caught:
+        UploadService(sessions, storage).create(
+            scenario_id, "expired-key", _stored_package(storage)
+        )
+    assert caught.value.code == "BATCH_EXPIRED"

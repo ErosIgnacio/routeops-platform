@@ -5,8 +5,8 @@ optimization boundary: stock-aware distribution-center allocation, VROOM route
 optimization, OSRM road costs, PostGIS persistence, and a React/MapLibre control
 center. All business data in this repository is synthetic.
 
-> Status: **Milestone 1 formally accepted by the user on 2026-09-28 after
-> visual confirmation of both routes.**
+> Status: **Milestone 1 and deliveries 2.1–2.2 accepted. Delivery 2.3a is
+> pending review on its feature branch.**
 >
 > Docker Desktop/WSL2
 > validation passed on 2026-09-24, including MLD map processing, online
@@ -75,14 +75,16 @@ Stop services without deleting the PostgreSQL volume:
 docker compose down
 ```
 
-## Milestone 2.1 import validation (pending review)
+## Milestone 2 imports
 
-The current branch adds a read-only validator and reproducible CSV/XLSX
-templates for five datasets. It does not publish imports or change the demo
-API. With the backend dependencies installed and `PYTHONPATH=backend/src`, run
+The 2.1 CLI provides a read-only validator and reproducible CSV/XLSX templates
+for five datasets. With the backend dependencies installed and `PYTHONPATH=backend/src`, run
 `python -m routeops.application.import_cli templates <directory>` or
 `python -m routeops.application.import_cli validate <five CSV paths or one XLSX path>`.
 See [the 2.1 contract and issue catalog](docs/milestone-2-1-import-validation.md).
+
+Delivery 2.3a adds local-only provisional uploads, private original storage,
+and recoverable retention cleanup. See [the 2.3a API and configuration](docs/milestone-2-3a-private-upload.md).
 
 ## API
 
