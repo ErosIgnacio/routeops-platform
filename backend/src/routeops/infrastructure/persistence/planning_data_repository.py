@@ -75,6 +75,31 @@ class ScenarioRepository:
         with self._sessions() as session:
             return session.get(ScenarioModel, scenario_id)
 
+    def list_page(self, *, offset: int = 0, limit: int = 50) -> dict[str, object]:
+        if offset < 0 or not 1 <= limit <= 100:
+            raise ValueError("PAGINATION_INVALID")
+        with self._sessions() as session:
+            rows = list(
+                session.scalars(
+                    select(ScenarioModel)
+                    .order_by(ScenarioModel.created_at.desc(), ScenarioModel.id.desc())
+                    .offset(offset)
+                    .limit(limit + 1)
+                )
+            )
+            return {
+                "items": [
+                    {
+                        "id": str(row.id),
+                        "name": row.name,
+                        "status": row.status,
+                        "created_at": row.created_at.isoformat(),
+                    }
+                    for row in rows[:limit]
+                ],
+                "next_offset": offset + limit if len(rows) > limit else None,
+            }
+
     def revisions(self, scenario_id: UUID) -> list[ScenarioRevisionModel]:
         with self._sessions() as session:
             return list(

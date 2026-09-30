@@ -194,10 +194,49 @@ body {
   padding: 22px 4px 0;
 }
 
+.import-content { max-width: 1500px; }
+.import-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.85fr);
+  gap: 18px;
+  align-items: start;
+}
+.import-card {
+  padding: 22px;
+  min-width: 0;
+  background: rgba(14, 28, 45, 0.94) !important;
+}
+.context-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.count-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.count-cell, .revision-detail {
+  padding: 12px;
+  border: 1px solid rgba(148, 169, 194, 0.15);
+  border-radius: 9px;
+  background: rgba(8, 17, 31, 0.45);
+}
+.issue-list { max-height: 360px; overflow: auto; }
+.issue-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(148, 169, 194, 0.12);
+}
+.history-button { justify-content: flex-start !important; text-align: left !important; overflow-wrap: anywhere; }
+
 @media (max-width: 1100px) {
   .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .workspace-grid { grid-template-columns: 1fr; }
   .route-map { height: 520px; }
+  .import-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 680px) {
@@ -210,4 +249,6 @@ body {
   .kpi-card { min-height: 122px; padding: 16px; }
   .route-map { height: 430px; }
   .footer { flex-direction: column; }
+  .context-grid { grid-template-columns: 1fr; }
+  .import-card { padding: 16px; }
 }

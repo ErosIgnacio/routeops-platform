@@ -175,3 +175,33 @@ class UploadService:
                     for item in files
                 ],
             }
+
+    def lookup(self, scenario_id: UUID, client_key: str) -> dict[str, object] | None:
+        with self._sessions() as session:
+            batch_id = session.scalar(
+                select(ImportBatchModel.id).where(
+                    ImportBatchModel.scenario_id == scenario_id,
+                    ImportBatchModel.client_key == client_key,
+                )
+            )
+        return self.get(scenario_id, batch_id) if batch_id is not None else None
+
+    def list(self, scenario_id: UUID, *, offset: int = 0, limit: int = 50) -> dict[str, object]:
+        if offset < 0 or not 1 <= limit <= 100:
+            raise UploadError("PAGINATION_INVALID", 422)
+        with self._sessions() as session:
+            if session.get(ScenarioModel, scenario_id) is None:
+                raise UploadError("SCENARIO_NOT_FOUND", 404)
+            rows = list(
+                session.scalars(
+                    select(ImportBatchModel.id)
+                    .where(ImportBatchModel.scenario_id == scenario_id)
+                    .order_by(ImportBatchModel.created_at.desc(), ImportBatchModel.id.desc())
+                    .offset(offset)
+                    .limit(limit + 1)
+                )
+            )
+        return {
+            "items": [self.get(scenario_id, batch_id) for batch_id in rows[:limit]],
+            "next_offset": offset + limit if len(rows) > limit else None,
+        }

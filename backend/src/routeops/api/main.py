@@ -17,6 +17,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from routeops.api.logging import configure_logging
 from routeops.application.import_context import ValidationContext
+from routeops.application.import_contract import DATASETS
+from routeops.application.import_templates import csv_template, xlsx_template
 from routeops.application.import_upload import UploadError, receive_package
 from routeops.application.planning import DemoPlanningService
 from routeops.domain.optimization import SolutionQuality
@@ -269,6 +271,31 @@ def create_scenario(request: CreateScenarioRequest) -> dict[str, str]:
     return {"id": str(scenario_id), "name": request.name.strip()}
 
 
+@app.get("/api/v1/scenarios", tags=["imports"])
+def list_scenarios(offset: int = 0, limit: int = 50) -> dict[str, object]:
+    try:
+        return scenario_repository.list_page(offset=offset, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="PAGINATION_INVALID") from exc
+
+
+@app.get("/api/v1/import-templates/{name}", tags=["imports"])
+def download_import_template(name: str) -> Response:
+    if name == "workbook":
+        return Response(
+            content=xlsx_template(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": 'attachment; filename="routeops-template.xlsx"'},
+        )
+    if name in DATASETS:
+        return Response(
+            content=csv_template(name),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{name}.csv"'},
+        )
+    raise HTTPException(status_code=404, detail="IMPORT_TEMPLATE_NOT_FOUND")
+
+
 @app.post("/api/v1/scenarios/{scenario_id}/imports", tags=["imports"])
 async def upload_import(
     scenario_id: UUID, request: Request, response: Response
@@ -282,6 +309,20 @@ async def upload_import(
     result = upload_service.get(scenario_id, batch_id)
     if result is None:
         raise RuntimeError("created import batch cannot be read")
+    return result
+
+
+@app.get("/api/v1/scenarios/{scenario_id}/imports", tags=["imports"])
+def list_imports(scenario_id: UUID, offset: int = 0, limit: int = 50) -> dict[str, object]:
+    return upload_service.list(scenario_id, offset=offset, limit=limit)
+
+
+@app.get("/api/v1/scenarios/{scenario_id}/imports/lookup", tags=["imports"])
+def lookup_import(scenario_id: UUID, key: str) -> dict[str, object]:
+    client_key = upload_service.validate_client_key(key)
+    result = upload_service.lookup(scenario_id, client_key)
+    if result is None:
+        raise HTTPException(status_code=404, detail="BATCH_NOT_FOUND")
     return result
 
 
@@ -336,6 +377,11 @@ def publish_import(scenario_id: UUID, batch_id: UUID, response: Response) -> dic
         raise PublicationError("PUBLICATION_INFRASTRUCTURE_FAILED", 503) from exc
     response.status_code = 201 if created else 200
     return result
+
+
+@app.get("/api/v1/scenarios/{scenario_id}/imports/{batch_id}/publication", tags=["imports"])
+def get_import_publication(scenario_id: UUID, batch_id: UUID) -> dict[str, Any]:
+    return publication_service.get_by_batch(scenario_id, batch_id)
 
 
 @app.get("/api/v1/scenarios/{scenario_id}/revisions", tags=["imports"])

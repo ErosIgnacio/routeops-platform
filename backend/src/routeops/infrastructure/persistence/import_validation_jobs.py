@@ -157,7 +157,7 @@ class ValidationJobService:
                 "lease_until": job.lease_until.isoformat() if job and job.lease_until else None,
                 "report": (
                     {
-                        "valid": batch.status == "VALID",
+                        "valid": batch.status in ("VALID", "PUBLISHED"),
                         "counts": report.counts,
                         "report_sha256": report.report_sha256,
                         "checked_rules": report.checked_rules,

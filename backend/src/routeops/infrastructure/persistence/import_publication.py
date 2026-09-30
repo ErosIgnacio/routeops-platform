@@ -483,6 +483,18 @@ class ImportPublicationService:
                 "next_after": revisions[limit - 1].revision_no if len(revisions) > limit else None,
             }
 
+    def get_by_batch(self, scenario_id: UUID, batch_id: UUID) -> dict[str, Any]:
+        with self.sessions() as session:
+            batch = session.get(ImportBatchModel, batch_id)
+            if batch is None or batch.scenario_id != scenario_id:
+                raise PublicationError("BATCH_NOT_FOUND", 404)
+            if batch.status != "PUBLISHED":
+                raise PublicationError("PUBLICATION_NOT_FOUND", 404)
+            revision = self._existing(session, batch_id)
+            if revision is None:
+                raise PublicationError("PUBLICATION_INCONSISTENT", 409)
+            return self._result(revision)
+
     def get_revision(self, scenario_id: UUID, revision_no: int) -> dict[str, Any]:
         with self.sessions() as session:
             revision = session.scalar(

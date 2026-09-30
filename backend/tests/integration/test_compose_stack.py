@@ -4,6 +4,8 @@ import csv
 import io
 import os
 import time
+import xml.etree.ElementTree as ET
+import zipfile
 from uuid import uuid4
 
 import httpx
@@ -174,11 +176,33 @@ def test_real_stack_publishes_and_reads_partial_dataset_revision() -> None:
         scenario.raise_for_status()
         scenario_id = scenario.json()["id"]
         base = f"/api/v1/scenarios/{scenario_id}"
-        uploaded = client.post(
-            f"{base}/imports", files=files, headers={"Idempotency-Key": uuid4().hex}
-        )
+        scenarios = client.get("/api/v1/scenarios?limit=100")
+        assert scenarios.status_code == 200
+        assert any(item["id"] == scenario_id for item in scenarios.json()["items"])
+        for name in DATASETS:
+            template = client.get(f"/api/v1/import-templates/{name}")
+            assert template.status_code == 200
+            assert template.content == csv_template(name)
+        workbook = client.get("/api/v1/import-templates/workbook")
+        assert workbook.status_code == 200
+        with zipfile.ZipFile(io.BytesIO(workbook.content)) as template:
+            manifest = ET.fromstring(template.read("xl/workbook.xml"))
+            sheet_names = [sheet.get("name") for sheet in manifest.findall(".//{*}sheet")]
+            assert sheet_names == list(DATASETS)
+            for index, name in enumerate(DATASETS, start=1):
+                sheet = ET.fromstring(template.read(f"xl/worksheets/sheet{index}.xml"))
+                expected = tuple(field.name for field in SCHEMA[name])
+                assert tuple(value.text for value in sheet.findall(".//{*}t")) == expected
+        assert client.get("/api/v1/import-templates/other").status_code == 404
+        assert client.get("/api/v1/scenarios?limit=0").status_code == 422
+        key = uuid4().hex
+        uploaded = client.post(f"{base}/imports", files=files, headers={"Idempotency-Key": key})
         assert uploaded.status_code == 201
         batch_id = uploaded.json()["id"]
+        assert client.get(f"{base}/imports/lookup", params={"key": key}).json()["id"] == batch_id
+        assert client.get(f"{base}/imports/lookup", params={"key": uuid4().hex}).status_code == 404
+        assert any(item["id"] == batch_id for item in client.get(f"{base}/imports").json()["items"])
+        assert client.get(f"{base}/imports/{batch_id}/publication").status_code == 404
         validation_url = f"{base}/imports/{batch_id}/validation"
         started = client.post(
             validation_url,
@@ -205,6 +229,8 @@ def test_real_stack_publishes_and_reads_partial_dataset_revision() -> None:
         assert revision["revision_no"] == 1
         repeated = client.post(f"{base}/imports/{batch_id}/publish")
         assert repeated.status_code == 200 and repeated.json() == revision
+        assert client.get(f"{base}/imports/{batch_id}/publication").json() == revision
+        assert client.get(validation_url).json()["report"]["valid"] is True
         listed = client.get(f"{base}/revisions?limit=1")
         assert listed.status_code == 200
         assert listed.json() == {"items": [revision], "next_after": None}

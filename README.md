@@ -5,8 +5,8 @@ optimization boundary: stock-aware distribution-center allocation, VROOM route
 optimization, OSRM road costs, PostGIS persistence, and a React/MapLibre control
 center. All business data in this repository is synthetic.
 
-> Status: **Milestone 1 and deliveries 2.1–2.2 accepted. Delivery 2.3a is
-> pending review on its feature branch.**
+> Status: **Milestone 1 and deliveries 2.1–2.3c accepted. Delivery 2.3d is
+> available locally for final review on `feat/m2-3-import-flow`.**
 >
 > Docker Desktop/WSL2
 > validation passed on 2026-09-24, including MLD map processing, online
@@ -58,6 +58,7 @@ run the download command and review any checksum change before preprocessing.
 Once the stack is healthy:
 
 - dashboard: <http://localhost:5173>
+- import workspace: <http://127.0.0.1:5173/imports>
 - OpenAPI: <http://localhost:8000/docs>
 - liveness: <http://localhost:8000/health/live>
 - readiness: <http://localhost:8000/health/ready>
@@ -85,6 +86,8 @@ See [the 2.1 contract and issue catalog](docs/milestone-2-1-import-validation.md
 
 Delivery 2.3a adds local-only provisional uploads, private original storage,
 and recoverable retention cleanup. See [the 2.3a API and configuration](docs/milestone-2-3a-private-upload.md).
+The import workspace, its recovery flow and performance measurements are in
+[the 2.3d guide](docs/milestone-2-3d-import-ui.md).
 
 ## API
 

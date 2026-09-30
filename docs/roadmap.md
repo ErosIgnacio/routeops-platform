@@ -61,6 +61,11 @@ Acceptance criteria:
 
 ## Milestone 2 — data and inventory
 
+Status: **deliveries 2.1–2.3 accepted; 2.4 in progress**. The import workspace
+and local performance samples for 2.3 are recorded in
+[the 2.3d guide](milestone-2-3d-import-ui.md). These single-run measurements are
+not capacity guarantees.
+
 Approved delivery sequence (2026-09-28):
 
 1. **2.1:** input contracts, reproducible templates, and bounded validation.
@@ -70,6 +75,11 @@ Approved delivery sequence (2026-09-28):
 5. **2.5:** execution, history, run interface, multiple-demo selection, and
    measured VROOM workload limit.
 6. **2.6:** integrated acceptance, concurrency, recovery, and demo presentation.
+
+Delivery 2.6 will measure the import flow over HTTP under concurrent clients,
+report latency and process memory on representative hardware, and establish
+performance objectives from measured results. No objective is inferred from the
+local service-level samples collected in 2.3d.
 
 Assignment demos and phase boundaries:
 
