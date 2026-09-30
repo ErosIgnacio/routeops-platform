@@ -61,11 +61,13 @@ Acceptance criteria:
 
 ## Milestone 2 — data and inventory
 
-Status: **deliveries 2.1–2.4 accepted; 2.5 in progress**. The import workspace
+Status: **deliveries 2.1–2.5 accepted; 2.6 in progress**. The import workspace
 and local performance samples for 2.3 are recorded in
 [the 2.3d guide](milestone-2-3d-import-ui.md). These single-run measurements are
 not capacity guarantees. The 2.4 inventory, policy evaluation, and reservations
-are recorded in [the 2.4 guide](milestone-2-4-allocation.md).
+are recorded in [the 2.4 guide](milestone-2-4-allocation.md). The 2.5 run
+lifecycle, demos and measured local solver workload are recorded in
+[the 2.5 guide](milestone-2-5-planning.md).
 
 Approved delivery sequence (2026-09-28):
 

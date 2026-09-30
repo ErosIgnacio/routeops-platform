@@ -881,3 +881,113 @@ class AllocationAttemptEventModel(Base):
         UniqueConstraint("attempt_id", "sequence", name="uq_allocation_event_sequence"),
         CheckConstraint("sequence >= 0", name="ck_allocation_event_sequence"),
     )
+
+
+class RevisionRunJobModel(Base):
+    __tablename__ = "revision_run_jobs"
+
+    run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("planning_runs.id", ondelete="RESTRICT"), primary_key=True
+    )
+    scenario_id: Mapped[UUID] = mapped_column(
+        ForeignKey("scenarios.id", ondelete="RESTRICT"), nullable=False
+    )
+    scenario_revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("scenario_revisions.id", ondelete="RESTRICT"), nullable=False
+    )
+    client_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False)
+    lease_token: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    allocation_attempt_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("allocation_attempts.id", ondelete="RESTRICT")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    transitioned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("scenario_revision_id", "client_key", name="uq_revision_run_key"),
+        UniqueConstraint("allocation_attempt_id", name="uq_revision_run_allocation"),
+        CheckConstraint("length(client_key) BETWEEN 1 AND 100", name="ck_revision_run_key"),
+        CheckConstraint("request_sha256 ~ '^[0-9a-f]{64}$'", name="ck_revision_run_hash"),
+        CheckConstraint(
+            "status IN ('QUEUED','RUNNING','READY','ACCEPTED','CANCELED','FAILED')",
+            name="ck_revision_run_status",
+        ),
+        CheckConstraint("version >= 0 AND attempts >= 0", name="ck_revision_run_counters"),
+        CheckConstraint(
+            "(lease_token IS NULL) = (lease_until IS NULL)", name="ck_revision_run_lease_pair"
+        ),
+        Index("ix_revision_run_claim", "status", "lease_until"),
+        Index("ix_revision_run_scenario", "scenario_id", "created_at"),
+    )
+
+
+class RevisionRunEventModel(Base):
+    __tablename__ = "revision_run_events"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("revision_run_jobs.run_id", ondelete="RESTRICT"), nullable=False
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    from_status: Mapped[str | None] = mapped_column(String(20))
+    to_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(100))
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "sequence", name="uq_revision_run_event_sequence"),
+        CheckConstraint("sequence >= 0", name="ck_revision_run_event_sequence"),
+    )
+
+
+class RunOrderReservationModel(Base):
+    __tablename__ = "run_order_reservations"
+
+    run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("revision_run_jobs.run_id", ondelete="RESTRICT"), primary_key=True
+    )
+    decision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("allocation_order_decisions.id", ondelete="RESTRICT"), primary_key=True
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    transitioned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("decision_id", name="uq_run_order_reservation_decision"),
+        CheckConstraint(
+            "status IN ('HELD','CONFIRMED','RELEASED')", name="ck_run_order_reservation_status"
+        ),
+        CheckConstraint("version >= 0", name="ck_run_order_reservation_version"),
+    )
+
+
+class RunReservationEventModel(Base):
+    __tablename__ = "run_reservation_events"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    run_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    decision_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    from_status: Mapped[str | None] = mapped_column(String(20))
+    to_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(100))
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["run_id", "decision_id"],
+            ["run_order_reservations.run_id", "run_order_reservations.decision_id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "run_id", "decision_id", "sequence", name="uq_run_reservation_event_sequence"
+        ),
+        CheckConstraint("sequence >= 0", name="ck_run_reservation_event_sequence"),
+    )

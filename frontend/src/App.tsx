@@ -18,6 +18,7 @@ import {
 import { createDemoRun, getLatestRun } from "./api";
 import { formatEstimatedCost } from "./formatters";
 import { ImportWorkspace } from "./ImportWorkspace";
+import { PlanningWorkspace } from "./PlanningWorkspace";
 import { routeColorForVehicle } from "./map-data";
 import { RouteMap } from "./RouteMap";
 import { RouteSequence } from "./RouteSequence";
@@ -70,18 +71,19 @@ function KpiCard({ label, value, note }: { label: string; value: string; note: s
 
 export default function App() {
   const importPage = window.location.pathname === "/imports";
+  const planningPage = window.location.pathname === "/planning";
   const [run, setRun] = useState<PlanningRun | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (importPage) { setBusy(false); return; }
+    if (importPage || planningPage) { setBusy(false); return; }
     getLatestRun()
       .then(setRun)
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setBusy(false));
-  }, [importPage]);
+  }, [importPage, planningPage]);
 
   const execute = async () => {
     setBusy(true);
@@ -122,6 +124,9 @@ export default function App() {
   if (importPage) {
     return <ThemeProvider theme={theme}><CssBaseline /><ImportWorkspace /></ThemeProvider>;
   }
+  if (planningPage) {
+    return <ThemeProvider theme={theme}><CssBaseline /><PlanningWorkspace /></ThemeProvider>;
+  }
 
   return (
     <ThemeProvider theme={theme}>
@@ -141,6 +146,7 @@ export default function App() {
           </Stack>
           <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
             <Button href="/imports" size="small">Importaciones</Button>
+            <Button href="/planning" size="small">Planificación</Button>
             <Chip size="small" label="SYNTHETIC DATA" color="primary" variant="outlined" />
             <Chip size="small" label="SANTIAGO · CL" variant="outlined" />
           </Stack>

@@ -21,10 +21,12 @@ from routeops.application.import_contract import DATASETS
 from routeops.application.import_templates import csv_template, xlsx_template
 from routeops.application.import_upload import UploadError, receive_package
 from routeops.application.planning import DemoPlanningService
+from routeops.application.revision_problem import RunInputError
 from routeops.domain.optimization import SolutionQuality
 from routeops.domain.policies.allocation import DeterministicAllocationPolicy
 from routeops.infrastructure.config import Settings
 from routeops.infrastructure.data import SyntheticScenarioLoader
+from routeops.infrastructure.data.demo_catalog import DemoCatalogService
 from routeops.infrastructure.persistence import (
     DatabaseRunRepository,
     create_database_engine,
@@ -39,7 +41,9 @@ from routeops.infrastructure.persistence.import_validation_jobs import (
     ValidationJobError,
     ValidationJobService,
 )
+from routeops.infrastructure.persistence.operational_allocation import OperationalAllocationService
 from routeops.infrastructure.persistence.planning_data_repository import ScenarioRepository
+from routeops.infrastructure.persistence.revision_runs import PlanningRunError, RevisionRunService
 from routeops.infrastructure.routing.errors import RoutingDependencyError
 from routeops.infrastructure.routing.osrm import OsrmClient
 from routeops.infrastructure.solver import VroomAdapter
@@ -93,6 +97,19 @@ planning = DemoPlanningService(
     settings.solver_timeout_seconds,
     settings.map_dataset_sha256,
 )
+revision_planning = RevisionRunService(
+    sessions,
+    OperationalAllocationService(sessions, osrm),
+    osrm,
+    vroom,
+    settings.planning_limits,
+    timeout_seconds=settings.solver_timeout_seconds,
+    lease_seconds=settings.planning_lease_seconds,
+    max_attempts=settings.planning_max_attempts,
+)
+demo_catalog = DemoCatalogService(
+    scenario_repository, object_storage, upload_service, validation_service, publication_service
+)
 
 
 @asynccontextmanager
@@ -122,6 +139,13 @@ class CreateDemoRunRequest(BaseModel):
 
 class CreateScenarioRequest(BaseModel):
     name: str
+
+
+class CreateRevisionRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    solution_quality: SolutionQuality = SolutionQuality.BALANCED
+    allocation_policy: str = "alternatives-v2"
 
 
 class RequestValidation(BaseModel):
@@ -158,6 +182,15 @@ def publication_error(_: Request, exc: PublicationError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={"code": exc.code, "detail": "Import publication could not be completed."},
+    )
+
+
+@app.exception_handler(PlanningRunError)
+@app.exception_handler(RunInputError)
+def revision_run_error(_: Request, exc: PlanningRunError | RunInputError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"code": exc.code, "detail": "Planning request could not be completed."},
     )
 
 
@@ -392,6 +425,62 @@ def list_scenario_revisions(scenario_id: UUID, after: int = 0, limit: int = 100)
 @app.get("/api/v1/scenarios/{scenario_id}/revisions/{revision_no}", tags=["imports"])
 def get_scenario_revision(scenario_id: UUID, revision_no: int) -> dict[str, Any]:
     return publication_service.get_revision(scenario_id, revision_no)
+
+
+@app.post("/api/v1/scenarios/{scenario_id}/revisions/{revision_no}/runs", tags=["planning"])
+def create_revision_run(
+    scenario_id: UUID,
+    revision_no: int,
+    body: CreateRevisionRunRequest,
+    request: Request,
+    response: Response,
+) -> dict[str, Any]:
+    key = request.headers.get("Idempotency-Key")
+    if key is None:
+        raise PlanningRunError("RUN_IDEMPOTENCY_KEY_REQUIRED", 422)
+    result, created = revision_planning.submit(
+        scenario_id, revision_no, key, body.solution_quality, body.allocation_policy
+    )
+    response.status_code = 202 if created else 200
+    return result
+
+
+@app.get("/api/v1/scenarios/{scenario_id}/revisions/{revision_no}/runs/lookup", tags=["planning"])
+def lookup_revision_run(scenario_id: UUID, revision_no: int, key: str) -> dict[str, Any]:
+    return revision_planning.lookup(scenario_id, revision_no, key)
+
+
+@app.get("/api/v1/scenarios/{scenario_id}/revision-runs", tags=["planning"])
+def list_revision_runs(scenario_id: UUID, offset: int = 0, limit: int = 50) -> dict[str, Any]:
+    return revision_planning.list(scenario_id, offset=offset, limit=limit)
+
+
+@app.get("/api/v1/revision-runs/{run_id}", tags=["planning"])
+def get_revision_run(run_id: UUID) -> dict[str, Any]:
+    return revision_planning.get(run_id)
+
+
+@app.post("/api/v1/revision-runs/{run_id}/accept", tags=["planning"])
+def accept_revision_run(run_id: UUID) -> dict[str, Any]:
+    return revision_planning.accept(run_id)
+
+
+@app.post("/api/v1/revision-runs/{run_id}/cancel", tags=["planning"])
+def cancel_revision_run(run_id: UUID) -> dict[str, Any]:
+    return revision_planning.cancel(run_id)
+
+
+@app.get("/api/v1/allocation-demos", tags=["planning"])
+def list_allocation_demos() -> list[dict[str, str]]:
+    return demo_catalog.list()
+
+
+@app.post("/api/v1/allocation-demos/{name}/prepare", tags=["planning"])
+def prepare_allocation_demo(name: str) -> dict[str, Any]:
+    try:
+        return demo_catalog.prepare(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/api/v1/runs/latest", tags=["planning"])

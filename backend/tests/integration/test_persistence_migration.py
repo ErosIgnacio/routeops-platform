@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import importlib
 import io
 import json
 import os
@@ -12,6 +13,7 @@ import zipfile
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -21,6 +23,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from geoalchemy2.elements import WKTElement
 from sqlalchemy import Engine, create_engine, func, select, text
 from sqlalchemy.engine import URL, make_url
@@ -37,10 +40,22 @@ from routeops.application.import_validation import (
     ValidationReport,
     validate_package,
 )
+from routeops.application.revision_problem import RunInputError, WorkloadLimits
+from routeops.domain.optimization import (
+    Certainty,
+    OptimizationProblem,
+    OptimizationResult,
+    OptimizationSummary,
+    ResultStatus,
+    SolverMetadata,
+    UnassignedReason,
+    UnassignedTask,
+)
 from routeops.domain.policies.operational_allocation import (
     OperationalAllocationPolicy,
     OrderAllocation,
 )
+from routeops.infrastructure.data.demo_catalog import DemoCatalogService
 from routeops.infrastructure.persistence.import_publication import (
     ImportPublicationService,
     PublicationError,
@@ -68,8 +83,10 @@ from routeops.infrastructure.persistence.models import (
     InventorySnapshotModel,
     OperationalInventoryPositionModel,
     OperationalInventoryStateModel,
+    OptimizedRouteModel,
     OrderLineModel,
     OrderModel,
+    RevisionRunJobModel,
     ScenarioModel,
     ScenarioRevisionModel,
     ValidationIssueModel,
@@ -86,8 +103,12 @@ from routeops.infrastructure.persistence.planning_data_repository import (
     validate_timezone,
 )
 from routeops.infrastructure.persistence.repository import DatabaseRunRepository
+from routeops.infrastructure.persistence.revision_runs import PlanningRunError, RevisionRunService
 from routeops.infrastructure.persistence.session import create_session_factory
 from routeops.infrastructure.routing.errors import RoutingDependencyError
+from routeops.infrastructure.routing.osrm import OsrmClient
+from routeops.infrastructure.solver.errors import SolverDependencyError
+from routeops.infrastructure.solver.vroom import VroomAdapter
 from routeops.infrastructure.storage import LocalObjectStorage
 from routeops.infrastructure.storage.maintenance import ImportStorageMaintenance
 
@@ -837,7 +858,7 @@ def test_revisions_keys_links_and_downgrade_guard(
     with pytest.raises(RuntimeError, match="downgrade blocked"):
         command.downgrade(Config(str(ALEMBIC_INI)), "20260924_0001")
     with database.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "d42e4a91b6c0"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "c951e2a7d430"
 
 
 def test_quantities_costs_geometry_and_immutability(database: Engine) -> None:
@@ -2055,6 +2076,503 @@ def _published_allocation_fixture(
     return scenario, storage, services
 
 
+def test_revision_run_reaches_real_vroom_and_accepts_reservations(
+    database: Engine, tmp_path: Path
+) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    sessions = create_session_factory(database)
+    osrm = OsrmClient("http://127.0.0.1:5000")
+    service = RevisionRunService(
+        sessions,
+        OperationalAllocationService(sessions, osrm),
+        osrm,
+        VroomAdapter("http://127.0.0.1:3000"),
+        WorkloadLimits(),
+    )
+    queued, created = service.submit(scenario, 1, "real-solver")
+    assert created and queued["status"] == "QUEUED"
+    assert service.process_once()
+    ready = service.get(UUID(queued["run_id"]))
+    assert ready["status"] == "READY", ready["error"]
+    assert ready["result"]["routes"]
+    assert ready["decisions"][0]["reservation_status"] == "HELD"
+    accepted = service.accept(UUID(queued["run_id"]))
+    assert accepted["status"] == "ACCEPTED"
+    assert accepted["decisions"][0]["reservation_status"] == "CONFIRMED"
+
+
+def test_run_result_insert_failure_rolls_back_and_releases_holds(
+    database: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    sessions = create_session_factory(database)
+    osrm = OsrmClient("http://127.0.0.1:5000")
+    service = RevisionRunService(
+        sessions,
+        OperationalAllocationService(sessions, osrm),
+        osrm,
+        VroomAdapter("http://127.0.0.1:3000"),
+        WorkloadLimits(),
+    )
+
+    def fail_geometry(_: object) -> None:
+        raise RuntimeError("injected route persistence failure")
+
+    monkeypatch.setattr(service, "_geometry", fail_geometry)
+    queued, _ = service.submit(scenario, 1, "persistence-fault")
+    assert service.process_once()
+    failed = service.get(UUID(queued["run_id"]))
+    assert failed["status"] == "FAILED" and failed["result"] is None
+    assert failed["decisions"][0]["reservation_status"] == "RELEASED"
+    with sessions() as session:
+        assert session.scalar(select(func.count()).select_from(OptimizedRouteModel)) == 0
+        position = session.scalar(select(OperationalInventoryPositionModel))
+        assert position is not None and position.routeops_reserved_quantity == 0
+
+
+def test_isolated_demo_catalog_publishes_all_four_fixtures(
+    database: Engine, tmp_path: Path
+) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path / "demo-originals")
+    upload, validation, publication = _publication_services(database, storage, tmp_path / "spool")
+    catalog = DemoCatalogService(
+        ScenarioRepository(sessions), storage, upload, validation, publication
+    )
+    prepared = {
+        name: catalog.prepare(name)
+        for name in (
+            "exclusive_stock",
+            "choice_between_centers",
+            "shared_stock_restricted",
+            "fleet_restrictions",
+        )
+    }
+    assert len({item["scenario_id"] for item in prepared.values()}) == 4
+    osrm = OsrmClient("http://127.0.0.1:5000")
+    service = RevisionRunService(
+        sessions,
+        OperationalAllocationService(sessions, osrm),
+        osrm,
+        VroomAdapter("http://127.0.0.1:3000"),
+        WorkloadLimits(),
+    )
+    results: dict[str, dict[str, object]] = {}
+    for name, item in prepared.items():
+        queued, _ = service.submit(UUID(item["scenario_id"]), 1, f"run-{name}")
+        assert service.process_once()
+        results[name] = service.get(UUID(queued["run_id"]))
+        assert results[name]["status"] == "READY", results[name]["error"]
+    assert [row["center_id"] for row in results["exclusive_stock"]["decisions"]] == [
+        "CD-A",
+        "CD-B",
+        None,
+    ]
+    assert results["exclusive_stock"]["decisions"][-1]["reason_code"] == "STOCK_NO_FULL_COVERAGE"
+    assert results["choice_between_centers"]["decisions"][0]["center_id"] in ("CD-A", "CD-B")
+    assert [row["center_id"] for row in results["shared_stock_restricted"]["decisions"]] == [
+        "CD-B",
+        "CD-A",
+    ]
+    assert all(
+        row["reason_code"] == "NO_COMPATIBLE_VEHICLE"
+        for row in results["fleet_restrictions"]["decisions"]
+    )
+
+
+class FixedMatrix:
+    def duration_matrix(
+        self, origins: tuple[object, ...], destinations: tuple[object, ...]
+    ) -> tuple[tuple[int, ...], ...]:
+        return tuple(tuple(100 for _ in destinations) for _ in origins)
+
+
+class AllUnassignedSolver:
+    def solve(self, problem: OptimizationProblem) -> OptimizationResult:
+        return OptimizationResult(
+            contract_version=problem.contract_version,
+            problem_id=problem.problem_id,
+            status=ResultStatus.PARTIAL,
+            solver=SolverMetadata("fake", "1", "1", "fake", "1", 1),
+            summary=OptimizationSummary(
+                0,
+                0,
+                len(problem.tasks),
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                10_000,
+                problem.vehicles[0].costs.currency,
+            ),
+            routes=(),
+            unassigned=tuple(
+                UnassignedTask(
+                    task.task_id,
+                    task.order_id,
+                    "OPTIMIZATION",
+                    (
+                        UnassignedReason(
+                            "SOLVER_NO_FEASIBLE_ROUTE", Certainty.INFERRED, "No route", {}
+                        ),
+                    ),
+                )
+                for task in problem.tasks
+            ),
+        )
+
+
+class BrokenSolver:
+    def solve(self, problem: OptimizationProblem) -> OptimizationResult:
+        raise SolverDependencyError("synthetic outage")
+
+
+class InconsistentSolver:
+    def __init__(self, kind: str) -> None:
+        self.kind = kind
+
+    def solve(self, problem: OptimizationProblem) -> OptimizationResult:
+        valid = AllUnassignedSolver().solve(problem)
+        if self.kind == "duplicate":
+            return replace(valid, unassigned=valid.unassigned * 2)
+        if self.kind == "unknown":
+            return replace(valid, unassigned=(replace(valid.unassigned[0], task_id=uuid4()),))
+        if self.kind == "summary":
+            return replace(valid, summary=replace(valid.summary, unassigned_task_count=0))
+        return replace(valid, contract_version="wrong")
+
+
+def _revision_run_service(database: Engine, solver: object | None = None) -> RevisionRunService:
+    sessions = create_session_factory(database)
+    return RevisionRunService(
+        sessions,
+        OperationalAllocationService(sessions, FixedAllocationTravel()),
+        FixedMatrix(),  # type: ignore[arg-type]
+        solver if solver is not None else AllUnassignedSolver(),
+        WorkloadLimits(),
+    )
+
+
+def test_revision_run_idempotency_and_workload_limit(database: Engine, tmp_path: Path) -> None:
+    scenario, storage, services = _published_allocation_fixture(database, tmp_path)
+    service = _revision_run_service(database)
+    first, created = service.submit(scenario, 1, "same-key")
+    repeated, again = service.submit(scenario, 1, "same-key")
+    assert created and not again and first["run_id"] == repeated["run_id"]
+    with pytest.raises(PlanningRunError, match="RUN_IDEMPOTENCY_CONFLICT"):
+        service.submit(scenario, 1, "same-key", policy_version="greedy-v1")
+    limited = RevisionRunService(
+        service.sessions,
+        service.allocation,
+        service.osrm,
+        service.solver,
+        WorkloadLimits(max_orders=1, max_lines=1, max_vehicles=1, max_matrix_cells=1),
+    )
+    rows = _publication_rows()
+    rows["order_lines"].append({**rows["order_lines"][0], "sku": "SKU-2"})
+    rows["inventory"].append({**rows["inventory"][0], "sku": "SKU-2"})
+    new_batch = _validated_publication_batch(scenario, "larger", rows, services, storage)
+    # A valid larger publication is not interpreted as a solver capacity guarantee.
+    services[2].publish(scenario, new_batch)
+    prior, _ = service.submit(scenario, 2, "already-created")
+    same, created = limited.submit(scenario, 2, "already-created")
+    assert not created and same["run_id"] == prior["run_id"]
+    with pytest.raises(RunInputError, match="SOLVER_WORKLOAD_LIMIT"):
+        limited.submit(scenario, 2, "too-large")
+    with service.sessions() as session:
+        assert session.scalar(select(func.count()).select_from(AllocationAttemptModel)) == 0
+
+
+def test_solver_unassigned_releases_only_routeops_stock(database: Engine, tmp_path: Path) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    service = _revision_run_service(database)
+    queued, _ = service.submit(scenario, 1, "unassigned")
+    assert service.process_once()
+    ready = service.get(UUID(queued["run_id"]))
+    assert ready["status"] == "READY"
+    assert ready["result"]["unassigned"][0]["stage"] == "OPTIMIZATION"
+    assert ready["decisions"][0]["reservation_status"] == "RELEASED"
+    with service.sessions() as session:
+        position = session.scalar(select(OperationalInventoryPositionModel))
+        assert position is not None
+        assert position.externally_reserved_quantity == 2
+        assert position.routeops_reserved_quantity == 0
+        assert position.available_quantity == 7
+    assert service.accept(UUID(queued["run_id"]))["status"] == "ACCEPTED"
+
+
+def test_solver_unassigned_releases_all_order_lines(database: Engine, tmp_path: Path) -> None:
+    rows = _publication_rows()
+    rows["order_lines"].append({**rows["order_lines"][0], "sku": "SKU-2", "quantity": "3"})
+    rows["inventory"].append({**rows["inventory"][0], "sku": "SKU-2", "on_hand_quantity": "8"})
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path, rows)
+    service = _revision_run_service(database)
+    queued, _ = service.submit(scenario, 1, "multiline-unassigned")
+    assert service.process_once()
+    ready = service.get(UUID(queued["run_id"]))
+    assert ready["status"] == "READY"
+    assert ready["decisions"][0]["reservation_status"] == "RELEASED"
+    with service.sessions() as session:
+        positions = list(session.scalars(select(OperationalInventoryPositionModel)))
+        assert {item.sku for item in positions} == {"SKU-1", "SKU-2"}
+        assert all(item.routeops_reserved_quantity == 0 for item in positions)
+        assert all(item.externally_reserved_quantity == 2 for item in positions)
+
+
+def test_solver_failure_releases_holds_and_cancel_is_idempotent(
+    database: Engine, tmp_path: Path
+) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    service = _revision_run_service(database, BrokenSolver())
+    failed, _ = service.submit(scenario, 1, "fails")
+    assert service.process_once()
+    result = service.get(UUID(failed["run_id"]))
+    assert result["status"] == "FAILED"
+    assert result["error"] == "SOLVER_DEPENDENCY_FAILED"
+    assert result["decisions"][0]["reservation_status"] == "RELEASED"
+    with pytest.raises(PlanningRunError, match="RUN_TRANSITION_CONFLICT"):
+        service.cancel(UUID(failed["run_id"]))
+    queued, _ = service.submit(scenario, 1, "cancel-me")
+    canceled = service.cancel(UUID(queued["run_id"]))
+    assert canceled["status"] == "CANCELED"
+    assert service.cancel(UUID(queued["run_id"]))["status"] == "CANCELED"
+
+
+@pytest.mark.parametrize("kind", ["duplicate", "unknown", "contract", "summary"])
+def test_inconsistent_solver_result_is_rejected_and_holds_released(
+    database: Engine, tmp_path: Path, kind: str
+) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    service = _revision_run_service(database, InconsistentSolver(kind))
+    queued, _ = service.submit(scenario, 1, f"invalid-{kind}")
+    assert service.process_once()
+    failed = service.get(UUID(queued["run_id"]))
+    assert failed["status"] == "FAILED"
+    assert failed["error"] == "SOLVER_RESPONSE_INVALID"
+    assert failed["result"] is None
+    assert failed["decisions"][0]["reservation_status"] == "RELEASED"
+    with service.sessions() as session:
+        position = session.scalar(select(OperationalInventoryPositionModel))
+        assert position is not None and position.routeops_reserved_quantity == 0
+
+
+def test_planning_lease_recovery_fences_stale_worker(database: Engine, tmp_path: Path) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    service = _revision_run_service(database)
+    service.submit(scenario, 1, "recover")
+    first = service.claim()
+    assert first is not None
+    with service.sessions.begin() as session:
+        job = session.get(RevisionRunJobModel, first[0])
+        assert job is not None
+        job.lease_until = datetime.now(UTC) - timedelta(seconds=1)
+    second = service.claim()
+    assert second is not None and second[0] == first[0] and second[1] != first[1]
+    assert not service.heartbeat(*first)
+    service._fail(*first, "STALE")
+    assert service.get(first[0])["status"] == "RUNNING"
+    service._process(*second)
+    assert service.get(first[0])["status"] == "READY"
+
+
+def test_concurrent_run_submission_uses_one_idempotency_key(
+    database: Engine, tmp_path: Path
+) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    service = _revision_run_service(database)
+    barrier = Barrier(2)
+
+    def submit() -> tuple[dict[str, object], bool]:
+        barrier.wait(timeout=10)
+        return service.submit(scenario, 1, "simultaneous")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = [pool.submit(submit) for _ in range(2)]
+        first, second = [future.result(timeout=30) for future in results]
+    assert first[0]["run_id"] == second[0]["run_id"]
+    assert sorted((first[1], second[1])) == [False, True]
+    with service.sessions() as session:
+        assert session.scalar(select(func.count()).select_from(RevisionRunJobModel)) == 1
+
+
+def test_planning_api_preserves_key_history_and_transitions(
+    database: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    service = _revision_run_service(database)
+    api = importlib.import_module("routeops.api.main")
+    monkeypatch.setattr(api, "revision_planning", service)
+    path = f"/api/v1/scenarios/{scenario}/revisions/1/runs"
+    with TestClient(api.app) as client:
+        assert client.post(path, json={}).status_code == 422
+        first = client.post(path, headers={"Idempotency-Key": "api-key"}, json={})
+        assert first.status_code == 202
+        run_id = first.json()["run_id"]
+        repeated = client.post(path, headers={"Idempotency-Key": "api-key"}, json={})
+        assert repeated.status_code == 200 and repeated.json()["run_id"] == run_id
+        conflict = client.post(
+            path,
+            headers={"Idempotency-Key": "api-key"},
+            json={"allocation_policy": "greedy-v1"},
+        )
+        assert conflict.status_code == 409
+        assert conflict.json()["code"] == "RUN_IDEMPOTENCY_CONFLICT"
+        lookup = client.get(f"{path}/lookup", params={"key": "api-key"})
+        assert lookup.status_code == 200 and lookup.json()["run_id"] == run_id
+        history = client.get(f"/api/v1/scenarios/{scenario}/revision-runs")
+        assert history.status_code == 200 and history.json()["items"][0]["run_id"] == run_id
+        assert service.process_once()
+        detail = client.get(f"/api/v1/revision-runs/{run_id}")
+        assert detail.status_code == 200 and detail.json()["status"] == "READY"
+        accepted = client.post(f"/api/v1/revision-runs/{run_id}/accept")
+        assert accepted.status_code == 200 and accepted.json()["status"] == "ACCEPTED"
+        assert client.post(f"/api/v1/revision-runs/{run_id}/accept").status_code == 200
+        assert client.post(f"/api/v1/revision-runs/{run_id}/cancel").status_code == 409
+
+
+def test_two_revision_runs_compete_for_one_stock_position(database: Engine, tmp_path: Path) -> None:
+    rows = _publication_rows()
+    rows["order_lines"][0]["quantity"] = "7"
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path, rows)
+    sessions = create_session_factory(database)
+    osrm = OsrmClient("http://127.0.0.1:5000")
+    service = RevisionRunService(
+        sessions,
+        OperationalAllocationService(sessions, osrm),
+        osrm,
+        VroomAdapter("http://127.0.0.1:3000"),
+        WorkloadLimits(),
+    )
+    first, _ = service.submit(scenario, 1, "compete-1")
+    second, _ = service.submit(scenario, 1, "compete-2")
+    barrier = Barrier(2)
+
+    def execute() -> bool:
+        barrier.wait(timeout=10)
+        return service.process_once()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(execute) for _ in range(2)]
+        assert all(future.result(timeout=45) for future in futures)
+    outcomes = [service.get(UUID(item["run_id"])) for item in (first, second)]
+    assert [item["status"] for item in outcomes] == ["READY", "READY"]
+    assert sorted(len(item["result"]["routes"]) for item in outcomes) == [0, 1]
+    loser = next(item for item in outcomes if not item["result"]["routes"])
+    assert loser["decisions"][0]["reason_code"] == "STOCK_NO_FULL_COVERAGE"
+    with sessions() as session:
+        position = session.scalar(select(OperationalInventoryPositionModel))
+        assert position is not None
+        assert position.routeops_reserved_quantity == 7
+        assert position.externally_reserved_quantity == 2
+
+
+def test_external_calls_do_not_hold_scenario_or_inventory_locks(
+    database: Engine, tmp_path: Path
+) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    sessions = create_session_factory(database)
+
+    class ProbeMatrix(FixedMatrix):
+        def duration_matrix(
+            self, origins: tuple[object, ...], destinations: tuple[object, ...]
+        ) -> tuple[tuple[int, ...], ...]:
+            with sessions.begin() as probe:
+                assert (
+                    probe.scalar(
+                        select(ScenarioModel)
+                        .where(ScenarioModel.id == scenario)
+                        .with_for_update(nowait=True)
+                    )
+                    is not None
+                )
+            return super().duration_matrix(origins, destinations)
+
+    class ProbeSolver(AllUnassignedSolver):
+        def solve(self, problem: OptimizationProblem) -> OptimizationResult:
+            with sessions.begin() as probe:
+                assert (
+                    probe.scalar(
+                        select(OperationalInventoryPositionModel).with_for_update(nowait=True)
+                    )
+                    is not None
+                )
+            return super().solve(problem)
+
+    service = RevisionRunService(
+        sessions,
+        OperationalAllocationService(sessions, FixedAllocationTravel()),
+        ProbeMatrix(),  # type: ignore[arg-type]
+        ProbeSolver(),
+        WorkloadLimits(),
+    )
+    queued, _ = service.submit(scenario, 1, "lock-probe")
+    assert service.process_once()
+    assert service.get(UUID(queued["run_id"]))["status"] == "READY"
+
+
+def test_accept_cancel_race_is_serialized_and_keeps_stock_consistent(
+    database: Engine, tmp_path: Path
+) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    sessions = create_session_factory(database)
+    osrm = OsrmClient("http://127.0.0.1:5000")
+    service = RevisionRunService(
+        sessions,
+        OperationalAllocationService(sessions, osrm),
+        osrm,
+        VroomAdapter("http://127.0.0.1:3000"),
+        WorkloadLimits(),
+    )
+    queued, _ = service.submit(scenario, 1, "race")
+    assert service.process_once()
+    run_id = UUID(queued["run_id"])
+    barrier = Barrier(2)
+
+    def change(action: str) -> str:
+        barrier.wait(timeout=10)
+        try:
+            result = service.accept(run_id) if action == "accept" else service.cancel(run_id)
+            return str(result["status"])
+        except PlanningRunError as exc:
+            return exc.code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(change, action) for action in ("accept", "cancel")]
+        outcomes = [future.result(timeout=30) for future in futures]
+    assert "RUN_TRANSITION_CONFLICT" in outcomes
+    final = service.get(run_id)
+    assert final["status"] in ("ACCEPTED", "CANCELED")
+    expected = "CONFIRMED" if final["status"] == "ACCEPTED" else "RELEASED"
+    assert final["decisions"][0]["reservation_status"] == expected
+    with sessions() as session:
+        position = session.scalar(select(OperationalInventoryPositionModel))
+        assert position is not None
+        assert position.routeops_reserved_quantity == (2 if expected == "CONFIRMED" else 0)
+
+
+def test_cancel_recovers_allocation_committed_before_run_link(
+    database: Engine, tmp_path: Path
+) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    service = _revision_run_service(database)
+    queued, _ = service.submit(scenario, 1, "orphan")
+    claim = service.claim()
+    assert claim is not None
+    attempt = service.allocation.allocate(
+        scenario, 1, queued["run_id"], travel_times=FixedAllocationTravel()
+    )
+    canceled = service.cancel(UUID(queued["run_id"]))
+    assert canceled["status"] == "CANCELED"
+    assert service.allocation.get(UUID(attempt["id"]))["status"] == "RELEASED"
+    with service.sessions() as session:
+        position = session.scalar(select(OperationalInventoryPositionModel))
+        assert position is not None and position.routeops_reserved_quantity == 0
+    service._process(*claim)
+    assert service.get(UUID(queued["run_id"]))["status"] == "CANCELED"
+
+
 def test_operational_multiline_reservations_and_repeated_transitions(
     database: Engine, tmp_path: Path
 ) -> None:
@@ -2363,10 +2881,36 @@ def test_operational_migration_downgrade_removes_only_new_empty_objects(
                 postgis_oid = connection.scalar(
                     text("SELECT oid FROM pg_extension WHERE extname='postgis'")
                 )
-            migrate(monkeypatch, url, "head")
+            migrate(monkeypatch, url, "d42e4a91b6c0")
             with engine.connect() as connection:
                 assert connection.scalar(text(TRIGGER_COUNT_SQL)) == before + 10
             command.downgrade(Config(str(ALEMBIC_INI)), "7a69c4d10e32")
+            with engine.connect() as connection:
+                assert connection.scalar(text(TRIGGER_COUNT_SQL)) == before
+                assert (
+                    connection.scalar(text("SELECT oid FROM pg_extension WHERE extname='postgis'"))
+                    == postgis_oid
+                )
+        finally:
+            engine.dispose()
+
+
+def test_revision_run_migration_downgrade_preserves_prior_objects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with temporary_database() as url:
+        migrate(monkeypatch, url, "d42e4a91b6c0")
+        engine = create_engine(url)
+        try:
+            with engine.connect() as connection:
+                before = connection.scalar(text(TRIGGER_COUNT_SQL))
+                postgis_oid = connection.scalar(
+                    text("SELECT oid FROM pg_extension WHERE extname='postgis'")
+                )
+            migrate(monkeypatch, url, "head")
+            with engine.connect() as connection:
+                assert connection.scalar(text(TRIGGER_COUNT_SQL)) == before + 8
+            command.downgrade(Config(str(ALEMBIC_INI)), "d42e4a91b6c0")
             with engine.connect() as connection:
                 assert connection.scalar(text(TRIGGER_COUNT_SQL)) == before
                 assert (

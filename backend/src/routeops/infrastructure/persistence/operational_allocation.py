@@ -59,11 +59,12 @@ class OperationalAllocationService:
         *,
         policy_version: str = OperationalAllocationPolicy.ALTERNATIVES,
         actor: str = "routeops",
+        travel_times: TravelTimeProvider | None = None,
     ) -> dict[str, Any]:
         if not 1 <= len(client_key) <= 100 or not 1 <= len(actor) <= 100:
             raise AllocationError("ALLOCATION_KEY_INVALID", 422)
         try:
-            policy = OperationalAllocationPolicy(self.travel_times, policy_version)
+            policy = OperationalAllocationPolicy(travel_times or self.travel_times, policy_version)
         except ValueError as exc:
             raise AllocationError("ALLOCATION_POLICY_UNKNOWN", 422) from exc
         attempt_id: UUID | None = None

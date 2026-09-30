@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from routeops.application.import_validation import ImportLimits
+from routeops.application.revision_problem import WorkloadLimits
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +28,10 @@ class Settings:
     import_validation_lease_seconds: int
     import_validation_max_attempts: int
     import_validation_poll_seconds: int
+    planning_limits: WorkloadLimits
+    planning_lease_seconds: int
+    planning_max_attempts: int
+    planning_poll_seconds: int
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -39,11 +44,23 @@ class Settings:
         lease_seconds = int(os.getenv("ROUTEOPS_IMPORT_VALIDATION_LEASE_SECONDS", "120"))
         max_attempts = int(os.getenv("ROUTEOPS_IMPORT_VALIDATION_MAX_ATTEMPTS", "3"))
         poll_seconds = int(os.getenv("ROUTEOPS_IMPORT_VALIDATION_POLL_SECONDS", "5"))
+        planning_lease = int(os.getenv("ROUTEOPS_PLANNING_LEASE_SECONDS", "120"))
+        planning_attempts = int(os.getenv("ROUTEOPS_PLANNING_MAX_ATTEMPTS", "3"))
+        planning_poll = int(os.getenv("ROUTEOPS_PLANNING_POLL_SECONDS", "5"))
         if (
-            min(retention_days, orphan_grace_seconds, lease_seconds, max_attempts, poll_seconds)
+            min(
+                retention_days,
+                orphan_grace_seconds,
+                lease_seconds,
+                max_attempts,
+                poll_seconds,
+                planning_lease,
+                planning_attempts,
+                planning_poll,
+            )
             <= 0
         ):
-            raise ValueError("import maintenance intervals must be positive")
+            raise ValueError("import and planning worker intervals must be positive")
         return cls(
             environment=os.getenv("ROUTEOPS_ENV", "development"),
             log_level=os.getenv("ROUTEOPS_LOG_LEVEL", "INFO"),
@@ -75,4 +92,13 @@ class Settings:
             import_validation_lease_seconds=lease_seconds,
             import_validation_max_attempts=max_attempts,
             import_validation_poll_seconds=poll_seconds,
+            planning_limits=WorkloadLimits(
+                max_orders=int(os.getenv("ROUTEOPS_PLANNING_MAX_ORDERS", "20")),
+                max_lines=int(os.getenv("ROUTEOPS_PLANNING_MAX_LINES", "60")),
+                max_vehicles=int(os.getenv("ROUTEOPS_PLANNING_MAX_VEHICLES", "6")),
+                max_matrix_cells=int(os.getenv("ROUTEOPS_PLANNING_MAX_MATRIX_CELLS", "80")),
+            ),
+            planning_lease_seconds=planning_lease,
+            planning_max_attempts=planning_attempts,
+            planning_poll_seconds=planning_poll,
         )

@@ -41,15 +41,18 @@ export type UnassignedOrder = {
 export type PlanningRun = {
   run_id: string;
   scenario_name: string;
-  status: "RUNNING" | "SUCCEEDED" | "PARTIAL" | "FAILED";
+  status:
+    | "QUEUED"
+    | "RUNNING"
+    | "READY"
+    | "ACCEPTED"
+    | "CANCELED"
+    | "SUCCEEDED"
+    | "PARTIAL"
+    | "FAILED";
   started_at: string;
   completed_at: string | null;
-  input: {
-    dataset_name: string;
-    dataset_seed: number;
-    synthetic: boolean;
-    solution_quality: string;
-  };
+  input: { solution_quality: string; [key: string]: unknown };
   result: {
     routes: OptimizedRoute[];
     unassigned: UnassignedOrder[];
