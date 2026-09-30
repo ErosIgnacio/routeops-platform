@@ -184,6 +184,67 @@ class ImportFileModel(Base):
     )
 
 
+class ImportValidationContextModel(Base):
+    __tablename__ = "import_validation_contexts"
+
+    batch_id: Mapped[UUID] = mapped_column(
+        ForeignKey("import_batches.id", ondelete="RESTRICT"), primary_key=True
+    )
+    context_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    context_data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("context_sha256 ~ '^[0-9a-f]{64}$'", name="ck_validation_context_hash"),
+    )
+
+
+class ImportValidationJobModel(Base):
+    __tablename__ = "import_validation_jobs"
+
+    batch_id: Mapped[UUID] = mapped_column(
+        ForeignKey("import_validation_contexts.batch_id", ondelete="RESTRICT"), primary_key=True
+    )
+    owner_token: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("attempts >= 0", name="ck_validation_job_attempts"),
+        CheckConstraint(
+            "(owner_token IS NULL AND lease_until IS NULL) OR "
+            "(owner_token IS NOT NULL AND lease_until IS NOT NULL)",
+            name="ck_validation_job_lease",
+        ),
+        Index("ix_validation_jobs_due", "lease_until", "updated_at"),
+    )
+
+
+class ImportValidationReportModel(Base):
+    __tablename__ = "import_validation_reports"
+
+    batch_id: Mapped[UUID] = mapped_column(
+        ForeignKey("import_validation_contexts.batch_id", ondelete="RESTRICT"), primary_key=True
+    )
+    package_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    context_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    contract_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    validator_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    report_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    counts: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    checked_rules: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    deferred_rules: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("package_sha256 ~ '^[0-9a-f]{64}$'", name="ck_validation_report_package"),
+        CheckConstraint("context_sha256 ~ '^[0-9a-f]{64}$'", name="ck_validation_report_context"),
+        CheckConstraint("report_sha256 ~ '^[0-9a-f]{64}$'", name="ck_validation_report_hash"),
+    )
+
+
 class ImportBatchExpirationModel(Base):
     __tablename__ = "import_batch_expirations"
 

@@ -84,6 +84,8 @@ services:
       ROUTEOPS_IMPORT_MAX_PACKAGE_BYTES: ${ROUTEOPS_IMPORT_MAX_PACKAGE_BYTES:-104857600}
       ROUTEOPS_IMPORT_RETENTION_DAYS: ${ROUTEOPS_IMPORT_RETENTION_DAYS:-30}
       ROUTEOPS_IMPORT_ORPHAN_GRACE_SECONDS: ${ROUTEOPS_IMPORT_ORPHAN_GRACE_SECONDS:-3600}
+      ROUTEOPS_IMPORT_VALIDATION_LEASE_SECONDS: ${ROUTEOPS_IMPORT_VALIDATION_LEASE_SECONDS:-120}
+      ROUTEOPS_IMPORT_VALIDATION_MAX_ATTEMPTS: ${ROUTEOPS_IMPORT_VALIDATION_MAX_ATTEMPTS:-3}
     volumes:
       - import-originals:/app/private-imports
     command:
@@ -111,6 +113,26 @@ services:
     volumes:
       - import-originals:/app/private-imports
     command: ["python", "-m", "routeops.infrastructure.storage.maintenance", "--loop"]
+    depends_on:
+      database:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+  import-validation-worker:
+    build:
+      context: ./backend
+    environment:
+      ROUTEOPS_DATABASE_URL: ${ROUTEOPS_DATABASE_URL:?Set ROUTEOPS_DATABASE_URL in .env}
+      ROUTEOPS_IMPORT_STORAGE_ROOT: /app/private-imports
+      ROUTEOPS_IMPORT_RETENTION_DAYS: ${ROUTEOPS_IMPORT_RETENTION_DAYS:-30}
+      ROUTEOPS_IMPORT_VALIDATION_LEASE_SECONDS: ${ROUTEOPS_IMPORT_VALIDATION_LEASE_SECONDS:-120}
+      ROUTEOPS_IMPORT_VALIDATION_MAX_ATTEMPTS: ${ROUTEOPS_IMPORT_VALIDATION_MAX_ATTEMPTS:-3}
+      ROUTEOPS_IMPORT_VALIDATION_POLL_SECONDS: ${ROUTEOPS_IMPORT_VALIDATION_POLL_SECONDS:-5}
+    volumes:
+      - import-originals:/app/private-imports
+    command: ["python", "-m", "routeops.infrastructure.persistence.validation_worker", "--loop"]
     depends_on:
       database:
         condition: service_healthy

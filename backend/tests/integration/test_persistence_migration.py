@@ -22,9 +22,21 @@ from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
+from routeops.application.import_context import ValidationContext
 from routeops.application.import_contract import DATASETS
+from routeops.application.import_templates import csv_template, xlsx_template
 from routeops.application.import_upload import ReceivedFile, ReceivedPackage, UploadError
+from routeops.application.import_validation import (
+    ImportLimits,
+    Issue,
+    ValidationReport,
+    validate_package,
+)
 from routeops.infrastructure.persistence.import_upload_repository import UploadService
+from routeops.infrastructure.persistence.import_validation_jobs import (
+    ValidationJobError,
+    ValidationJobService,
+)
 from routeops.infrastructure.persistence.models import (
     DistributionCenterModel,
     ImportBatchEventModel,
@@ -32,12 +44,16 @@ from routeops.infrastructure.persistence.models import (
     ImportBatchModel,
     ImportFileDeletionModel,
     ImportFileModel,
+    ImportValidationContextModel,
+    ImportValidationJobModel,
+    ImportValidationReportModel,
     InventorySnapshotLineModel,
     InventorySnapshotModel,
     OrderLineModel,
     OrderModel,
     ScenarioModel,
     ScenarioRevisionModel,
+    ValidationIssueModel,
     VehicleModel,
 )
 from routeops.infrastructure.persistence.planning_data_repository import (
@@ -623,6 +639,32 @@ def test_allowed_downgrade_removes_routeops_objects_only(monkeypatch: pytest.Mon
         engine.dispose()
 
 
+def test_validation_migration_downgrade_keeps_postgis_and_previous_triggers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with temporary_database() as url:
+        migrate(monkeypatch, url, "8db12e7c5f09")
+        engine = create_engine(url)
+        try:
+            with engine.connect() as connection:
+                before = connection.scalar(text(TRIGGER_COUNT_SQL))
+                postgis_oid = connection.scalar(
+                    text("SELECT oid FROM pg_extension WHERE extname='postgis'")
+                )
+            migrate(monkeypatch, url, "head")
+            with engine.connect() as connection:
+                assert connection.scalar(text(TRIGGER_COUNT_SQL)) == before + 2
+            command.downgrade(Config(str(ALEMBIC_INI)), "8db12e7c5f09")
+            with engine.connect() as connection:
+                assert connection.scalar(text(TRIGGER_COUNT_SQL)) == before
+                assert (
+                    connection.scalar(text("SELECT oid FROM pg_extension WHERE extname='postgis'"))
+                    == postgis_oid
+                )
+        finally:
+            engine.dispose()
+
+
 def test_upgrade_preserves_hito_1_and_empty_downgrade(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -771,7 +813,7 @@ def test_revisions_keys_links_and_downgrade_guard(
     with pytest.raises(RuntimeError, match="downgrade blocked"):
         command.downgrade(Config(str(ALEMBIC_INI)), "20260924_0001")
     with database.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "8db12e7c5f09"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "7a69c4d10e32"
 
 
 def test_quantities_costs_geometry_and_immutability(database: Engine) -> None:
@@ -942,6 +984,308 @@ def _stored_package(storage: LocalObjectStorage, *, suffix: bytes = b"") -> Rece
             f"{item.dataset}\0{item.object.sha256}\0{item.object.size_bytes}\n".encode("ascii")
         )
     return ReceivedPackage(tuple(files), manifest.hexdigest())
+
+
+def _valid_package(storage: LocalObjectStorage, *, workbook: bool = False) -> ReceivedPackage:
+    files: list[ReceivedFile] = []
+    for dataset in ("workbook",) if workbook else DATASETS:
+        writer = storage.begin()
+        writer.write(xlsx_template() if workbook else csv_template(dataset))
+        files.append(
+            ReceivedFile(
+                dataset, f"{dataset}.xlsx" if workbook else f"{dataset}.csv", writer.finish()
+            )
+        )
+    manifest = hashlib.sha256()
+    for item in sorted(files, key=lambda file: file.dataset):
+        manifest.update(
+            f"{item.dataset}\0{item.object.sha256}\0{item.object.size_bytes}\n".encode("ascii")
+        )
+    return ReceivedPackage(tuple(files), manifest.hexdigest())
+
+
+def _validation_context(*, currency: str = "CLP") -> ValidationContext:
+    return ValidationContext(
+        planning_date=date(2026, 10, 15),
+        horizon_start_at=datetime.fromisoformat("2026-10-15T00:00:00-03:00"),
+        horizon_end_at=datetime.fromisoformat("2026-10-15T23:59:59-03:00"),
+        timezone_iana="America/Santiago",
+        currency=currency,
+    )
+
+
+@pytest.mark.parametrize("workbook", [False, True])
+def test_validation_job_replays_exact_originals_and_is_idempotent(
+    database: Engine, tmp_path: Path, workbook: bool
+) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path)
+    scenario = ScenarioRepository(sessions).create("Validation worker")
+    batch, _ = UploadService(sessions, storage).create(
+        scenario, f"valid-{workbook}", _valid_package(storage, workbook=workbook)
+    )
+    worker = ValidationJobService(
+        sessions, storage, ImportLimits(), retention_days=30, lease_seconds=60, max_attempts=3
+    )
+    first = worker.request(scenario, batch, _validation_context())
+    assert first["status"] == "VALIDATING"
+    assert (
+        worker.request(scenario, batch, _validation_context())["context_sha256"]
+        == first["context_sha256"]
+    )
+    with pytest.raises(ValidationJobError, match="VALIDATION_CONTEXT_CONFLICT"):
+        worker.request(scenario, batch, _validation_context(currency="USD"))
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        claims = list(pool.map(lambda _: worker.claim(), range(2)))
+    assert sum(claim is not None for claim in claims) == 1
+    claim = next(claim for claim in claims if claim is not None)
+    assert claim is not None and claim[0] == batch
+    contents, context, package_sha = worker._read(batch)
+    assert package_sha == first["package_sha256"]
+    report = validate_package(contents, context=context)
+    assert report.valid
+    assert worker.finish(batch, claim[1], report)
+    assert not worker.finish(batch, claim[1], report)
+    assert worker.get(scenario, batch)["status"] == "VALID"
+    replayed, replay_context = worker.replay_verified_for_publication(scenario, batch)
+    assert len(replayed) == (1 if workbook else 5)
+    assert replay_context.sha256 == context.sha256
+    with sessions() as session:
+        saved = session.get(ImportValidationReportModel, batch)
+        assert saved is not None
+        assert saved.package_sha256 == package_sha
+        assert saved.context_sha256 == context.sha256
+        assert session.get(ImportValidationContextModel, batch) is not None
+        assert session.get(ImportValidationJobModel, batch) is not None
+        events = list(
+            session.scalars(
+                select(ImportBatchEventModel).where(ImportBatchEventModel.batch_id == batch)
+            )
+        )
+        assert [event.to_status for event in events] == ["RECEIVED", "VALIDATING", "VALID"]
+        assert (
+            session.scalar(
+                select(ValidationIssueModel).where(ValidationIssueModel.batch_id == batch)
+            )
+            is None
+        )
+        original = session.scalar(
+            select(ImportFileModel).where(ImportFileModel.batch_id == batch).limit(1)
+        )
+        assert original is not None
+        key = original.storage_key
+    (storage.objects / key).write_bytes(b"changed after validation")
+    with pytest.raises(ValidationJobError, match="VALIDATED_SOURCE_UNAVAILABLE"):
+        worker.replay_verified_for_publication(scenario, batch)
+
+
+def test_expired_lease_fences_old_worker_and_expiry_waits_for_live_lease(
+    database: Engine, tmp_path: Path
+) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path)
+    scenario = ScenarioRepository(sessions).create("Lease and expiry")
+    batch, _ = UploadService(sessions, storage).create(scenario, "lease", _valid_package(storage))
+    worker = ValidationJobService(
+        sessions, storage, ImportLimits(), retention_days=30, lease_seconds=60, max_attempts=3
+    )
+    worker.request(scenario, batch, _validation_context())
+    original = worker.claim()
+    assert original is not None
+    assert worker.heartbeat(batch, original[1])
+    assert not worker.heartbeat(batch, uuid4())
+    maintenance = ImportStorageMaintenance(
+        sessions, storage, retention_days=30, orphan_grace_seconds=3600
+    )
+    maintenance._retention = timedelta(seconds=0)
+    assert maintenance._expire_due() == 0
+    with sessions.begin() as session:
+        job = session.get(ImportValidationJobModel, batch)
+        assert job is not None
+        job.lease_until = datetime.now(UTC) - timedelta(seconds=1)
+    assert not worker.heartbeat(batch, original[1])
+    recovered = worker.claim()
+    assert recovered is not None and recovered[1] != original[1]
+    report = validate_package(worker._read(batch)[0], context=_validation_context())
+    assert not worker.finish(batch, original[1], report)
+    assert worker.finish(batch, recovered[1], report)
+    assert maintenance._expire_due() == 1
+    assert worker.get(scenario, batch)["status"] == "EXPIRED"
+    with sessions() as session:
+        events = list(
+            session.scalars(
+                select(ImportBatchEventModel).where(ImportBatchEventModel.batch_id == batch)
+            )
+        )
+        assert [event.to_status for event in events] == ["RECEIVED", "VALIDATING", "VALID"]
+
+
+def test_validation_failures_retry_without_partial_issues(database: Engine, tmp_path: Path) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path)
+    scenario = ScenarioRepository(sessions).create("Validation failure")
+    batch, _ = UploadService(sessions, storage).create(scenario, "infra", _valid_package(storage))
+    worker = ValidationJobService(
+        sessions, storage, ImportLimits(), retention_days=30, lease_seconds=60, max_attempts=2
+    )
+    worker.request(scenario, batch, _validation_context())
+    first = worker.claim()
+    assert first is not None and worker.fail(*first)
+    with sessions() as session:
+        assert session.get(ImportValidationReportModel, batch) is None
+        assert (
+            session.scalar(
+                select(ValidationIssueModel).where(ValidationIssueModel.batch_id == batch)
+            )
+            is None
+        )
+    second = worker.claim()
+    assert second is not None and worker.fail(*second)
+    assert worker.get(scenario, batch)["status"] == "FAILED"
+    assert worker.claim() is None
+
+
+def test_invalid_report_retry_has_one_set_of_immutable_issues(
+    database: Engine, tmp_path: Path
+) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path)
+    scenario = ScenarioRepository(sessions).create("Invalid import")
+    batch, _ = UploadService(sessions, storage).create(
+        scenario, "invalid", _stored_package(storage)
+    )
+    worker = ValidationJobService(
+        sessions, storage, ImportLimits(), retention_days=30, lease_seconds=60, max_attempts=3
+    )
+    worker.request(scenario, batch, _validation_context())
+    first = worker.claim()
+    assert first is not None
+    with sessions.begin() as session:
+        job = session.get(ImportValidationJobModel, batch)
+        assert job is not None
+        job.lease_until = datetime.now(UTC) - timedelta(seconds=1)
+    second = worker.claim()
+    assert second is not None
+    report = validate_package(worker._read(batch)[0], context=_validation_context())
+    assert not report.valid
+    assert not worker.finish(batch, first[1], report)
+    assert worker.finish(batch, second[1], report)
+    assert not worker.finish(batch, second[1], report)
+    assert worker.get(scenario, batch)["status"] == "INVALID"
+    page = worker.issues(scenario, batch, limit=2)
+    assert len(page["items"]) == 2
+    assert page["next_after"] is not None
+    remainder = worker.issues(scenario, batch, after=page["next_after"], limit=200)
+    assert len(page["items"]) + len(remainder["items"]) == len(report.issues)
+    assert all("\\" not in (item["source"] or "") for item in page["items"])
+    with sessions() as session:
+        events = list(
+            session.scalars(
+                select(ImportBatchEventModel).where(ImportBatchEventModel.batch_id == batch)
+            )
+        )
+        assert [event.to_status for event in events] == ["RECEIVED", "VALIDATING", "INVALID"]
+
+
+def test_worker_retries_missing_private_original_then_fails(
+    database: Engine, tmp_path: Path
+) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path)
+    scenario = ScenarioRepository(sessions).create("Missing original")
+    batch, _ = UploadService(sessions, storage).create(scenario, "missing", _valid_package(storage))
+    worker = ValidationJobService(
+        sessions, storage, ImportLimits(), retention_days=30, lease_seconds=60, max_attempts=2
+    )
+    worker.request(scenario, batch, _validation_context())
+    with sessions() as session:
+        file = session.scalar(
+            select(ImportFileModel).where(ImportFileModel.batch_id == batch).limit(1)
+        )
+        assert file is not None
+        storage.delete(file.storage_key)
+    assert worker.process_once()
+    assert worker.get(scenario, batch)["status"] == "VALIDATING"
+    assert worker.process_once()
+    assert worker.get(scenario, batch)["status"] == "FAILED"
+
+
+def test_validation_finish_is_atomic_and_expiry_fences_result(
+    database: Engine, tmp_path: Path
+) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path)
+    scenario = ScenarioRepository(sessions).create("Atomic validation")
+    uploader = UploadService(sessions, storage)
+    worker = ValidationJobService(
+        sessions, storage, ImportLimits(), retention_days=30, lease_seconds=60, max_attempts=3
+    )
+    batch, _ = uploader.create(scenario, "rollback", _valid_package(storage))
+    worker.request(scenario, batch, _validation_context())
+    claim = worker.claim()
+    assert claim is not None
+    broken = ValidationReport(
+        issues=[Issue("INSTANT_INVALID", "BROKEN", None, None, None, None, "Invalid")]
+    )
+    with pytest.raises(DBAPIError):
+        worker.finish(batch, claim[1], broken)
+    with sessions() as session:
+        assert session.get(ImportValidationReportModel, batch) is None
+        assert (
+            session.scalar(
+                select(ValidationIssueModel).where(ValidationIssueModel.batch_id == batch)
+            )
+            is None
+        )
+        persisted = session.get(ImportBatchModel, batch)
+        assert persisted is not None and persisted.status == "VALIDATING"
+    assert worker.finish(
+        batch, claim[1], validate_package(worker._read(batch)[0], context=_validation_context())
+    )
+
+    expired_batch, _ = uploader.create(scenario, "expired-midwork", _valid_package(storage))
+    worker.request(scenario, expired_batch, _validation_context())
+    held = worker.claim()
+    assert held is not None
+    worker.retention = timedelta(seconds=0)
+    assert not worker.finish(
+        expired_batch,
+        held[1],
+        validate_package(worker._read(expired_batch)[0], context=_validation_context()),
+    )
+    with sessions() as session:
+        assert session.get(ImportValidationReportModel, expired_batch) is None
+        persisted = session.get(ImportBatchModel, expired_batch)
+        assert persisted is not None and persisted.status == "VALIDATING"
+    assert worker.get(scenario, expired_batch)["status"] == "EXPIRED"
+
+
+def test_operational_area_is_checked_by_postgis_on_request(
+    database: Engine, tmp_path: Path
+) -> None:
+    sessions = create_session_factory(database)
+    storage = LocalObjectStorage(tmp_path)
+    scenario = ScenarioRepository(sessions).create("PostGIS area")
+    batch, _ = UploadService(sessions, storage).create(scenario, "area", _valid_package(storage))
+    worker = ValidationJobService(
+        sessions, storage, ImportLimits(), retention_days=30, lease_seconds=60, max_attempts=3
+    )
+    area: dict[str, object] = {
+        "type": "MultiPolygon",
+        "coordinates": [
+            [[[-71.0, -34.0], [-70.0, -34.0], [-70.0, -33.0], [-71.0, -33.0], [-71.0, -34.0]]]
+        ],
+    }
+    plain = _validation_context()
+    context = ValidationContext(
+        planning_date=plain.planning_date,
+        horizon_start_at=plain.horizon_start_at,
+        horizon_end_at=plain.horizon_end_at,
+        timezone_iana=plain.timezone_iana,
+        currency=plain.currency,
+        operational_area=area,
+    )
+    assert worker.request(scenario, batch, context)["status"] == "VALIDATING"
 
 
 def test_concurrent_same_key_upload_has_one_batch_and_no_extra_objects(

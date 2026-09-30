@@ -24,6 +24,9 @@ class Settings:
     import_limits: ImportLimits
     import_retention_days: int
     import_orphan_grace_seconds: int
+    import_validation_lease_seconds: int
+    import_validation_max_attempts: int
+    import_validation_poll_seconds: int
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -33,7 +36,13 @@ class Settings:
             raise RuntimeError("ROUTEOPS_DATABASE_URL must be configured")
         retention_days = int(os.getenv("ROUTEOPS_IMPORT_RETENTION_DAYS", "30"))
         orphan_grace_seconds = int(os.getenv("ROUTEOPS_IMPORT_ORPHAN_GRACE_SECONDS", "3600"))
-        if retention_days <= 0 or orphan_grace_seconds <= 0:
+        lease_seconds = int(os.getenv("ROUTEOPS_IMPORT_VALIDATION_LEASE_SECONDS", "120"))
+        max_attempts = int(os.getenv("ROUTEOPS_IMPORT_VALIDATION_MAX_ATTEMPTS", "3"))
+        poll_seconds = int(os.getenv("ROUTEOPS_IMPORT_VALIDATION_POLL_SECONDS", "5"))
+        if (
+            min(retention_days, orphan_grace_seconds, lease_seconds, max_attempts, poll_seconds)
+            <= 0
+        ):
             raise ValueError("import maintenance intervals must be positive")
         return cls(
             environment=os.getenv("ROUTEOPS_ENV", "development"),
@@ -63,4 +72,7 @@ class Settings:
             import_limits=ImportLimits.from_environment(),
             import_retention_days=retention_days,
             import_orphan_grace_seconds=orphan_grace_seconds,
+            import_validation_lease_seconds=lease_seconds,
+            import_validation_max_attempts=max_attempts,
+            import_validation_poll_seconds=poll_seconds,
         )

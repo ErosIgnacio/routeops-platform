@@ -4,16 +4,18 @@ import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Protocol
+from datetime import date, datetime
+from typing import Any, Protocol
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import text
 
 from routeops.api.logging import configure_logging
+from routeops.application.import_context import ValidationContext
 from routeops.application.import_upload import UploadError, receive_package
 from routeops.application.planning import DemoPlanningService
 from routeops.domain.optimization import SolutionQuality
@@ -26,6 +28,10 @@ from routeops.infrastructure.persistence import (
     create_session_factory,
 )
 from routeops.infrastructure.persistence.import_upload_repository import UploadService
+from routeops.infrastructure.persistence.import_validation_jobs import (
+    ValidationJobError,
+    ValidationJobService,
+)
 from routeops.infrastructure.persistence.planning_data_repository import ScenarioRepository
 from routeops.infrastructure.routing.errors import RoutingDependencyError
 from routeops.infrastructure.routing.osrm import OsrmClient
@@ -47,6 +53,14 @@ scenario_repository = ScenarioRepository(sessions)
 object_storage = LocalObjectStorage(settings.import_storage_root)
 upload_service = UploadService(
     sessions, object_storage, retention_days=settings.import_retention_days
+)
+validation_service = ValidationJobService(
+    sessions,
+    object_storage,
+    settings.import_limits,
+    retention_days=settings.import_retention_days,
+    lease_seconds=settings.import_validation_lease_seconds,
+    max_attempts=settings.import_validation_max_attempts,
 )
 osrm = OsrmClient(
     settings.osrm_url,
@@ -97,11 +111,32 @@ class CreateScenarioRequest(BaseModel):
     name: str
 
 
+class RequestValidation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    planning_date: date
+    horizon_start_at: datetime
+    horizon_end_at: datetime
+    timezone_iana: str
+    currency: str
+    operational_area: dict[str, Any] | None = None
+    contract_version: str = "2.1"
+    validator_version: str = "2.3b.1"
+
+
 @app.exception_handler(UploadError)
 def upload_error(_: Request, exc: UploadError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={"code": exc.code, "detail": "Import upload could not be accepted."},
+    )
+
+
+@app.exception_handler(ValidationJobError)
+def validation_job_error(_: Request, exc: ValidationJobError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"code": exc.code, "detail": "Import validation request could not be accepted."},
     )
 
 
@@ -237,6 +272,40 @@ def get_import(scenario_id: UUID, batch_id: UUID) -> dict[str, object]:
     if result is None:
         raise HTTPException(status_code=404, detail="Import batch was not found")
     return result
+
+
+@app.post("/api/v1/scenarios/{scenario_id}/imports/{batch_id}/validation", tags=["imports"])
+def request_import_validation(
+    scenario_id: UUID, batch_id: UUID, request: RequestValidation, response: Response
+) -> dict[str, Any]:
+    try:
+        context = ValidationContext(
+            planning_date=request.planning_date,
+            horizon_start_at=request.horizon_start_at,
+            horizon_end_at=request.horizon_end_at,
+            timezone_iana=request.timezone_iana,
+            currency=request.currency,
+            operational_area=request.operational_area,
+            contract_version=request.contract_version,
+            validator_version=request.validator_version,
+        )
+    except ValueError as exc:
+        raise ValidationJobError(str(exc), 422) from exc
+    result = validation_service.request(scenario_id, batch_id, context)
+    response.status_code = 202 if result["status"] == "VALIDATING" else 200
+    return result
+
+
+@app.get("/api/v1/scenarios/{scenario_id}/imports/{batch_id}/validation", tags=["imports"])
+def get_import_validation(scenario_id: UUID, batch_id: UUID) -> dict[str, Any]:
+    return validation_service.get(scenario_id, batch_id)
+
+
+@app.get("/api/v1/scenarios/{scenario_id}/imports/{batch_id}/validation/issues", tags=["imports"])
+def get_import_validation_issues(
+    scenario_id: UUID, batch_id: UUID, after: int = 0, limit: int = 100
+) -> dict[str, Any]:
+    return validation_service.issues(scenario_id, batch_id, after=after, limit=limit)
 
 
 @app.get("/api/v1/runs/latest", tags=["planning"])

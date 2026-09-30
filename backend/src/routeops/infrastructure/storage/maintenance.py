@@ -18,6 +18,7 @@ from routeops.infrastructure.persistence.models import (
     ImportBatchModel,
     ImportFileDeletionModel,
     ImportFileModel,
+    ImportValidationJobModel,
 )
 from routeops.infrastructure.persistence.session import (
     create_database_engine,
@@ -62,6 +63,10 @@ class ImportStorageMaintenance:
                         ImportBatchModel.status != "PUBLISHED",
                         ImportBatchModel.transitioned_at <= now - self._retention,
                         ~exists().where(ImportBatchExpirationModel.batch_id == ImportBatchModel.id),
+                        ~exists().where(
+                            ImportValidationJobModel.batch_id == ImportBatchModel.id,
+                            ImportValidationJobModel.lease_until > now,
+                        ),
                     )
                     .order_by(ImportBatchModel.transitioned_at)
                     .limit(100)

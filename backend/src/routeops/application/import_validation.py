@@ -10,10 +10,17 @@ import xml.etree.ElementTree as ET
 import zipfile
 from collections.abc import Iterator, Mapping
 from dataclasses import asdict, dataclass, field, fields
-from datetime import datetime, time
+from datetime import UTC, datetime, time
 from decimal import Decimal, InvalidOperation
 from typing import IO, Any, Literal
+from zoneinfo import ZoneInfo
 
+from routeops.application.import_context import (
+    ValidationContext,
+    local_instant,
+    prepare_area,
+    prepared_area_covers,
+)
 from routeops.application.import_contract import DATASETS, SCHEMA, Field
 
 Severity = Literal["ERROR", "WARNING"]
@@ -113,8 +120,14 @@ def _excerpt(value: str | None) -> str | None:
 
 
 class _Collector:
-    def __init__(self, limits: ImportLimits) -> None:
+    def __init__(self, limits: ImportLimits, context: ValidationContext | None = None) -> None:
         self.limits = limits
+        self.context = context
+        self.area = (
+            prepare_area(context.operational_area)
+            if context is not None and context.operational_area is not None
+            else None
+        )
         self.report = ValidationReport()
         self._truncated = False
         self.rows: dict[str, list[tuple[int, dict[str, Any]]]] = {name: [] for name in DATASETS}
@@ -251,6 +264,50 @@ class _Collector:
             self.add(
                 "STOCK_INCONSISTENT", "ERROR", name, source, row, "externally_reserved_quantity"
             )
+        if self.context is None:
+            return
+        context = self.context
+        if (
+            name == "orders"
+            and all(field_name in data for field_name in ("time_window_start", "time_window_end"))
+            and not (
+                context.horizon_start_at
+                <= data["time_window_start"].astimezone(UTC)
+                < data["time_window_end"].astimezone(UTC)
+                <= context.horizon_end_at
+            )
+        ):
+            self.add("WINDOW_OUTSIDE_HORIZON", "ERROR", name, source, row, "time_window_start")
+        if name in ("distribution_centers", "vehicles"):
+            zone = ZoneInfo(context.timezone_iana)
+            fields = (
+                ("operating_start", "operating_end")
+                if name == "distribution_centers"
+                else ("shift_start", "shift_end")
+            )
+            for field_name in fields:
+                clock = data.get(field_name)
+                if clock is not None:
+                    try:
+                        instant = local_instant(context.planning_date, clock, zone)
+                    except ValueError as exc:
+                        self.add(str(exc), "ERROR", name, source, row, field_name)
+                    else:
+                        inside = (
+                            context.horizon_start_at < instant <= context.horizon_end_at
+                            if field_name.endswith("_end")
+                            else context.horizon_start_at <= instant < context.horizon_end_at
+                        )
+                        if not inside:
+                            self.add(
+                                "LOCAL_TIME_OUTSIDE_HORIZON", "ERROR", name, source, row, field_name
+                            )
+        if (
+            self.area is not None
+            and all(field_name in data for field_name in ("latitude", "longitude"))
+            and not prepared_area_covers(self.area, data["longitude"], data["latitude"])
+        ):
+            self.add("POINT_OUTSIDE_AREA", "WARNING", name, source, row, "latitude")
 
     def relations(self, sources: Mapping[str, str]) -> None:
         orders = {key[0] for key in self.keys["orders"]}
@@ -342,7 +399,9 @@ def _parse(spec: Field, value: str) -> Any:
         return value
     if spec.kind == "skills":
         parts = [part.strip().lower() for part in value.split("|")]
-        if len(set(parts)) != len(parts) or any(not _SKILL.fullmatch(part) for part in parts):
+        if len(set(parts)) != len(parts) or any(
+            len(part) > 100 or not _SKILL.fullmatch(part) for part in parts
+        ):
             raise ValueError("SKILLS_INVALID")
         return frozenset(parts)
     if spec.kind == "integer":
@@ -407,11 +466,14 @@ def _parse(spec: Field, value: str) -> Any:
 
 
 def validate_package(
-    files: Mapping[str, bytes], limits: ImportLimits | None = None
+    files: Mapping[str, bytes],
+    limits: ImportLimits | None = None,
+    *,
+    context: ValidationContext | None = None,
 ) -> ValidationReport:
     """Validate exactly five named CSVs or one XLSX, without side effects."""
     limits = limits or ImportLimits()
-    collector = _Collector(limits)
+    collector = _Collector(limits, context)
     if not files:
         collector.add("PACKAGE_INCOMPLETE", "ERROR")
         return collector.report
@@ -690,4 +752,9 @@ _MESSAGES = {
     "ORDER_LINES_MISSING": "An order requires at least one order line",
     "SNAPSHOT_MISMATCH": "All inventory rows must share one snapshot instant",
     "SHIFT_OUTSIDE_HOURS": "The vehicle shift must fit within center hours",
+    "WINDOW_OUTSIDE_HORIZON": "The order window must fit within the planning horizon",
+    "LOCAL_TIME_NONEXISTENT": "The local time does not exist on the planning date",
+    "LOCAL_TIME_AMBIGUOUS": "The local time is ambiguous on the planning date",
+    "LOCAL_TIME_OUTSIDE_HORIZON": "The local time must fit within the planning horizon",
+    "POINT_OUTSIDE_AREA": "The point lies outside the optional operational area",
 }
