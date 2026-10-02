@@ -48,6 +48,7 @@ from routeops.infrastructure.persistence.import_validation_jobs import (
 )
 from routeops.infrastructure.persistence.operating_costs import OperatingCostQuery
 from routeops.infrastructure.persistence.operational_allocation import OperationalAllocationService
+from routeops.infrastructure.persistence.plan_metrics import PlanMetricsQuery
 from routeops.infrastructure.persistence.planning_data_repository import ScenarioRepository
 from routeops.infrastructure.persistence.revision_runs import PlanningRunError, RevisionRunService
 from routeops.infrastructure.routing.errors import RoutingDependencyError
@@ -67,6 +68,7 @@ engine = create_database_engine(settings.database_url)
 sessions = create_session_factory(engine)
 repository = DatabaseRunRepository(sessions)
 operating_costs = OperatingCostQuery(sessions)
+plan_metric_queries = PlanMetricsQuery(sessions)
 scenario_repository = ScenarioRepository(sessions)
 object_storage = LocalObjectStorage(settings.import_storage_root)
 upload_service = UploadService(
@@ -505,6 +507,11 @@ def latest_run() -> dict[str, object]:
 @app.get("/api/v1/runs/{run_id}/estimated-operating-cost", tags=["planning"])
 def get_estimated_operating_cost(run_id: UUID) -> dict[str, Any]:
     return operating_costs.get(run_id)
+
+
+@app.get("/api/v1/runs/{run_id}/metrics", tags=["planning"])
+def get_plan_metrics(run_id: UUID) -> dict[str, Any]:
+    return plan_metric_queries.get(run_id)
 
 
 @app.get("/api/v1/runs/{run_id}", tags=["planning"])

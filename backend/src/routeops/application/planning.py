@@ -7,6 +7,7 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from routeops.application.optimization_reconciliation import reconcile_result
 from routeops.application.ports.gateways import RunRepository, SolverGateway
+from routeops.application.processing_times import AttemptTimer
 from routeops.application.serialization import to_primitive
 from routeops.domain.models import ScenarioData
 from routeops.domain.optimization import (
@@ -59,6 +60,13 @@ class DemoPlanningService:
                 "solution_quality": quality.value,
                 "allocation_policy": DeterministicAllocationPolicy.version,
                 "map_dataset_sha256": self._map_dataset_sha256,
+                "metric_input_snapshot": {
+                    "orders": {order.id: [order.time_window_start.isoformat(),
+                                          order.time_window_end.isoformat()]
+                               for order in scenario.orders},
+                    "capacities": {vehicle.id: to_primitive(vehicle.capacity)
+                                   for vehicle in scenario.vehicles},
+                },
                 "operating_cost_rates": {
                     "currency": scenario.currency,
                     "vehicles": {
@@ -70,12 +78,21 @@ class DemoPlanningService:
                 },
             },
         )
+        token = uuid4()
+        self._repository.record_timing(run_id, token, {
+            "kind": "ATTEMPT_STARTED", "occurred_at": datetime.now(UTC),
+        })
+        timer = AttemptTimer(lambda event: self._repository.record_timing(run_id, token, event))
         try:
-            allocation = self._allocation.allocate(scenario)
-            problem = self._build_problem(run_id, scenario, allocation.allocated, quality)
-            solver_result = self._solver.solve(problem)
-            reconcile_result(problem, solver_result)
-            result = self._merge_unassigned(solver_result, allocation.unassigned)
+            with timer.phase("ALLOCATION_OSRM_DEMO"):
+                allocation = self._allocation.allocate(scenario)
+            with timer.phase("PREPARE_SOLVER"):
+                problem = self._build_problem(run_id, scenario, allocation.allocated, quality)
+            with timer.phase("SOLVER"):
+                solver_result = self._solver.solve(problem)
+            with timer.phase("RECONCILE"):
+                reconcile_result(problem, solver_result)
+                result = self._merge_unassigned(solver_result, allocation.unassigned)
             completed_at = datetime.now(UTC)
             kpis = self._kpis(result)
             self._repository.complete(
@@ -83,9 +100,11 @@ class DemoPlanningService:
                 completed_at,
                 to_primitive(result),
                 kpis,
+                timer=timer, timing_token=token,
             )
         except Exception as exc:
-            self._repository.fail(run_id, datetime.now(UTC), str(exc)[:1000])
+            self._repository.fail(run_id, datetime.now(UTC), str(exc)[:1000],
+                                  timer=timer, timing_token=token)
             raise
         persisted = self._repository.get(run_id)
         if persisted is None:

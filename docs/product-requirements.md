@@ -126,10 +126,14 @@ This is one-step lookahead, not a solution to joint packing or a global optimum.
 If OSRM is unavailable while ranking multiple otherwise eligible centers, the
 run fails explicitly rather than silently changing the policy. The implemented policy boundary permits evaluated alternatives.
 
-## KPI definitions (complete catalog scheduled for 3.1b)
+## KPI definitions (3.1b accepted)
 
 Every KPI includes its unit and denominator. Undefined ratios return `null`,
 not zero.
+The centralized [3.1b catalog](milestone-3-1b-metrics.md) supplies units,
+denominators, calculation versions, provenance and missing-data reasons.
+Base distances/times use meters/seconds; kilometer/hour presentation is a
+conversion. Analytics screens/exports remain 3.3, manual deltas remain 3.2.
 
 - Total, allocated, routed, and unassigned orders.
 - Assignment rate = routed orders / valid input orders.
@@ -137,13 +141,19 @@ not zero.
   time (hours).
 - Kilometers per routed order.
 - Per-route utilization peak and average for units, weight, and volume.
-- Window compliance = on-time routed orders / routed orders with a window.
+- Window compliance = routed orders whose service starts within their inclusive
+  window / routed orders. Windows are required in v1; absent historical windows
+  make the metric unavailable rather than changing its denominator.
 - Estimated cost and cost per routed order, in the scenario currency.
 - Used vehicles and duration per route.
-- Work balance: min/max/mean/stddev and coefficient of variation of route work
-  duration; `null` when fewer than two vehicles are used.
-- Processing time split into validation, allocation, solver, and total wall
-  time.
+- Work balance: min/max/mean/population stddev and coefficient of variation of
+  route duty. CV is `null` with fewer than two used vehicles or zero mean;
+  a single route has population stddev zero.
+- Processing: initial queue, active phases by attempt, retry/recovery waits and
+  direct creation-to-pre-commit READY/processing-terminal timestamp interval.
+  Commit acknowledgment is not recorded; durable total is unavailable. Import validation, browser
+  polling and user review waiting are separate. Unknown interruption intervals
+  remain `null`; known failed-attempt phases are retained.
 - Baseline delta for distance, duration, estimated cost, vehicles, and
   assignment rate. Both plans use the same normalized inputs and OSRM dataset.
 

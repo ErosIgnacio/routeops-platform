@@ -156,7 +156,7 @@ Acceptance criteria:
 
 ## Milestone 3 — operation and analytics
 
-Status: **3.1a accepted on 2026-10-02; 3.1b authorized next**, based on published
+Status: **3.1a published; 3.1b accepted; closing publication authorized**, based on published
 `v0.2.1` (`0241a5168d9f7c02a152cf3614bf502659ea33b3`). One branch,
 `feat/m3-1-operation-analytics`, serves the three parts of 3.1.
 
@@ -166,12 +166,16 @@ Approved sequence:
    business-cost foundation, optional vehicle distance/driving/task limits,
    versioned import compatibility and current documentation. Allocation policies
    are unchanged.
-2. **3.1b:** complete indicator catalog, calculation and queries.
+2. **3.1b:** complete versioned indicator catalog, central calculation/queries,
+   append-only fenced attempt/phase measurements and historical compatibility.
 3. **3.1c:** layered diagnoses with evidence and independent B2B/B2C cases.
 4. **3.2:** manual plan and comparison of strategies.
 5. **3.3:** interface, exports and integrated acceptance.
 
 See [the 3.1a report](milestone-3-1a-contracts-costs.md). 3.1c remains pending.
+3.1a closed at `87f765079c1b03e5e76dfced795a04a32347920b` in local/remote main
+and the shared branch. See [3.1b formulas and targeted evidence](milestone-3-1b-metrics.md).
+The joint backend/integration/migration/smoke/demo/frontend gate follows 3.1c.
 `v0.3.0` is reserved for acceptance of the whole milestone. Existing import and
 solver limits and the OSRM extract remain unchanged. B2B/B2C labels add no
 implicit constraints or integration services.

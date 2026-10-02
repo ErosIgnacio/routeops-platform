@@ -69,6 +69,39 @@ class PlanningRunModel(Base):
     )
 
 
+class PlanningTimingEventModel(Base):
+    __tablename__ = "planning_timing_events"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("planning_runs.id", ondelete="RESTRICT"), nullable=False
+    )
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    owner_token: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    phase: Mapped[str] = mapped_column(String(40), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    duration_ns: Mapped[int | None] = mapped_column(BigInteger)
+    outcome: Mapped[str | None] = mapped_column(String(30))
+    calculation_version: Mapped[str] = mapped_column(String(30), nullable=False)
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "attempt_no", "kind", "phase", name="uq_timing_boundary"),
+        CheckConstraint("attempt_no > 0", name="ck_timing_attempt"),
+        CheckConstraint("duration_ns IS NULL OR duration_ns >= 0", name="ck_timing_duration"),
+        CheckConstraint(
+            "kind IN ('ATTEMPT_STARTED','ATTEMPT_FINISHED','INTERRUPTED',"
+            "'PHASE_STARTED','PHASE_FINISHED')", name="ck_timing_kind",
+        ),
+        CheckConstraint(
+            "(kind IN ('PHASE_FINISHED','ATTEMPT_FINISHED')) = (duration_ns IS NOT NULL)",
+            name="ck_timing_measured",
+        ),
+        Index("ix_timing_run_attempt", "run_id", "attempt_no"),
+    )
+
+
 class OptimizedRouteModel(Base):
     __tablename__ = "optimized_routes"
 

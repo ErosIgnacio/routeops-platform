@@ -4,8 +4,15 @@ Delivery 2.2 adds a versioned, audit-ready persistence foundation. The physical
 schema lives in Alembic revision `525a2c8f3a8c`, following `20260924_0001`.
 Deliveries 2.3–2.5 now implement private provisional imports, contextual
 validation, atomic publication, scenario-wide operating stock, allocations,
-reservations and durable planning. The 3.1a candidate extends the current
-Alembic head to `e3a1b7c9d240` with nullable vehicle route limits.
+reservations and durable planning. Accepted 3.1a added nullable vehicle route
+limits at `e3a1b7c9d240`. Accepted 3.1b extends the head to `f6b2d8a4c190`
+with append-only `planning_timing_events`: run FK (RESTRICT), attempt number,
+owner token, boundary kind/phase, UTC timestamp, optional monotonic nanoseconds,
+outcome, version and measurement scope. A unique boundary key and database
+trigger enforce fencing and immutability. Downgrade refuses nonempty telemetry;
+no historical backfill or change to previous PostGIS objects is performed.
+The metric catalog is read-only derivation, not a replacement of stored
+results. See [3.1b formulas, provenance and migration evidence](milestone-3-1b-metrics.md).
 The descriptions below retain the 2.2 foundation; subsequent schema/state
 rules are detailed in the accepted 2.3, 2.4 and 2.5 guides.
 

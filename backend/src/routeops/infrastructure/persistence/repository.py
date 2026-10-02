@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from time import perf_counter_ns
 from typing import Any
 from uuid import UUID
 
@@ -8,11 +9,13 @@ from geoalchemy2.elements import WKTElement
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from routeops.application.processing_times import AttemptTimer
 from routeops.infrastructure.persistence.models import (
     OptimizedRouteModel,
     PlanningRunModel,
     UnassignedOrderModel,
 )
+from routeops.infrastructure.persistence.processing_times import append_timing
 
 
 class DatabaseRunRepository:
@@ -39,13 +42,30 @@ class DatabaseRunRepository:
         completed_at: datetime,
         result: dict[str, Any],
         kpis: dict[str, Any],
+        *, timer: AttemptTimer | None = None, timing_token: UUID | None = None,
+    ) -> None:
+        persist_start = perf_counter_ns()
+        if timer is not None:
+            timer.emit({"kind": "PHASE_STARTED", "phase": "PERSIST_RESULT",
+                        "occurred_at": datetime.now().astimezone()})
+        try:
+            self._complete(run_id, completed_at, result, kpis, timer, timing_token, persist_start)
+        except Exception:
+            if timer is not None:
+                timer.emit({"kind": "PHASE_FINISHED", "phase": "PERSIST_RESULT",
+                            "occurred_at": datetime.now().astimezone(), "outcome": "FAILED",
+                            "duration_ns": perf_counter_ns() - persist_start,
+                            "details": {"scope": "failed_persistence_call_including_rollback"}})
+            raise
+
+    def _complete(
+        self, run_id: UUID, completed_at: datetime, result: dict[str, Any], kpis: dict[str, Any],
+        timer: AttemptTimer | None, timing_token: UUID | None, persist_start: int,
     ) -> None:
         with self._sessions.begin() as session:
             run = session.get(PlanningRunModel, run_id)
             if run is None:
                 raise LookupError(f"planning run {run_id} does not exist")
-            run.status = str(result["status"])
-            run.completed_at = completed_at
             run.result_data = result
             run.kpis = kpis
             for sequence, route in enumerate(result["routes"]):
@@ -63,6 +83,7 @@ class DatabaseRunRepository:
                         payload=route,
                     )
                 )
+
             for item in result["unassigned"]:
                 session.add(
                     UnassignedOrderModel(
@@ -73,11 +94,32 @@ class DatabaseRunRepository:
                     )
                 )
 
-    def fail(self, run_id: UUID, completed_at: datetime, error: str) -> None:
+            session.flush()
+            if timer is not None and timing_token is not None:
+                append_timing(session, run_id, timing_token, 1, {
+                    "kind": "PHASE_FINISHED", "phase": "PERSIST_RESULT",
+                    "occurred_at": datetime.now().astimezone(), "outcome": "SUCCEEDED",
+                    "duration_ns": perf_counter_ns() - persist_start,
+                    "details": {"scope": "through_flush_excludes_final_commit"},
+                })
+                append_timing(session, run_id, timing_token, 1, timer.finish("READY"))
+            run.status = str(result["status"])
+            run.completed_at = datetime.now().astimezone() if timer is not None else completed_at
+
+    def record_timing(self, run_id: UUID, token: UUID, event: dict[str, Any]) -> None:
+        with self._sessions.begin() as session:
+            append_timing(session, run_id, token, 1, event)
+
+    def fail(
+        self, run_id: UUID, completed_at: datetime, error: str,
+        *, timer: AttemptTimer | None = None, timing_token: UUID | None = None,
+    ) -> None:
         with self._sessions.begin() as session:
             run = session.get(PlanningRunModel, run_id)
             if run is None:
                 return
+            if timer is not None and timing_token is not None:
+                append_timing(session, run_id, timing_token, 1, timer.finish("FAILED"))
             run.status = "FAILED"
             run.completed_at = completed_at
             run.error = error

@@ -41,6 +41,20 @@ def test_real_stack_routes_and_persists_demo() -> None:
         assert len(cost["routes"]) == len(run["result"]["routes"])
         assert cost["solver_objective"]["units"] == run["result"]["summary"]["objective_cost_units"]
         assert client.get(f"/api/v1/runs/{run['run_id']}/estimated-operating-cost").json() == cost
+        metrics_response = client.get(f"/api/v1/runs/{run['run_id']}/metrics")
+        metrics_response.raise_for_status()
+        report = metrics_response.json()
+        metrics = report["plan"]["metrics"]
+        assert metrics["valid_input_orders"]["value"] == 5
+        assert metrics["allocated_orders"]["value"] == 4
+        assert metrics["routed_orders"]["value"] == 4
+        assert metrics["unrouted_orders"]["value"] == 1
+        assert metrics["coverage"]["value"] == "0.8"
+        assert metrics["vehicles_used"]["value"] == 2
+        assert report["plan"]["operating_cost"] == cost
+        assert report["processing"]["initial_queue"]["value"] == "0"
+        assert report["processing"]["active_all_attempts"]["value"] is not None
+        assert client.get(f"/api/v1/runs/{run['run_id']}/metrics").json() == report
 
     assert run["status"] in {"SUCCEEDED", "PARTIAL"}
     assert run["kpis"]["routes"] >= 1

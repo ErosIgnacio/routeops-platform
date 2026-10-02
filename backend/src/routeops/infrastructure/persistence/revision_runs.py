@@ -10,6 +10,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from time import perf_counter_ns
 from typing import Any
 from typing import cast as type_cast
 from uuid import UUID, uuid4
@@ -20,7 +21,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from routeops.application.planning import DemoPlanningService
 from routeops.application.ports.gateways import SolverGateway
+from routeops.application.processing_times import AttemptTimer
 from routeops.application.revision_problem import (
+    PreparedRevision,
     RunInputError,
     WorkloadLimits,
     check_revision_size,
@@ -61,6 +64,7 @@ from routeops.infrastructure.persistence.operational_allocation import (
     AllocationError,
     OperationalAllocationService,
 )
+from routeops.infrastructure.persistence.processing_times import append_timing, interrupt_attempt
 from routeops.infrastructure.routing.errors import RoutingCoverageError, RoutingDependencyError
 from routeops.infrastructure.routing.osrm import OsrmClient
 from routeops.infrastructure.solver.errors import (
@@ -308,11 +312,15 @@ class RevisionRunService:
                 # The normal failure path releases linked reservations under the scenario lock.
                 run_id = job.run_id
             else:
+                interrupt_attempt(session, job, "LEASE_RECOVERED")
                 job.attempts += 1
                 token = uuid4()
                 job.lease_token = token
                 job.lease_until = now + timedelta(seconds=self.lease_seconds)
                 self._transition(session, job, "RUNNING", "LEASE_CLAIMED")
+                append_timing(session, job.run_id, token, job.attempts, {
+                    "kind": "ATTEMPT_STARTED", "occurred_at": now,
+                })
                 return job.run_id, token
         self._exhausted(run_id)
         return None
@@ -359,9 +367,10 @@ class RevisionRunService:
             self.recover_orphans()
             return False
         run_id, token = claim
+        timer = AttemptTimer(lambda event: self._record_timing(run_id, token, event))
         try:
             with self._heartbeat(run_id, token):
-                self._process(run_id, token)
+                self._process(run_id, token, timer)
         except (
             AllocationError,
             RunInputError,
@@ -389,10 +398,11 @@ class RevisionRunService:
             self._fail(
                 run_id, token, code,
                 exc.evidence if isinstance(exc, RoutingCoverageError) else None,
+                timer=timer,
             )
         except Exception:
             logger.exception("planning_run_failed_unexpected", extra={"run_id": str(run_id)})
-            self._fail(run_id, token, "PLANNING_INFRASTRUCTURE_FAILED")
+            self._fail(run_id, token, "PLANNING_INFRASTRUCTURE_FAILED", timer=timer)
         self.recover_orphans()
         return True
 
@@ -407,7 +417,75 @@ class RevisionRunService:
                 and job.lease_until >= datetime.now(UTC)
             )
 
-    def _process(self, run_id: UUID, token: UUID) -> None:
+    def _record_timing(self, run_id: UUID, token: UUID, event: dict[str, Any]) -> None:
+        with self.sessions.begin() as session:
+            job = self._locked_job(session, run_id)
+            if (job is not None and job.status == "RUNNING" and job.lease_token == token
+                    and job.lease_until is not None and job.lease_until >= datetime.now(UTC)):
+                append_timing(session, run_id, token, job.attempts, event)
+
+    def _process(
+        self, run_id: UUID, token: UUID, timer: AttemptTimer | None = None,
+    ) -> None:
+        timer = timer or AttemptTimer(lambda event: self._record_timing(run_id, token, event))
+        with timer.phase("VALIDATE_RUN"):
+            prepared, existing_attempt, quality, policy_version = self._prepare_run(run_id)
+        if not self._active(run_id, token):
+            return
+        snap_evidence: list[dict[str, object]] = []
+        if existing_attempt is None:
+            origins = tuple(center.location for center in prepared.centers)
+            destinations = tuple(order.location for order in prepared.orders)
+            with timer.phase("PREPARE_OSRM"):
+                try:
+                    checked = self.osrm.checked_duration_matrix(
+                        origins, destinations, self.max_snap_distance_m
+                    )
+                except RoutingCoverageError as exc:
+                    self._label_snaps(exc.evidence, prepared.centers, prepared.orders)
+                    raise
+                matrix = checked.durations
+                snap_evidence = checked.snaps
+                self._label_snaps(snap_evidence, prepared.centers, prepared.orders)
+                for item in snap_evidence:
+                    item["max_snap_distance_m"] = self.max_snap_distance_m
+            if not self._active(run_id, token):
+                return
+            cached = FrozenTravelTimes(origins, destinations, matrix)
+            with timer.phase("ALLOCATE_RESERVE"):
+                allocation = self.allocation.allocate(
+                    prepared.scenario_id,
+                    self._revision_number(prepared.revision_id),
+                    str(run_id),
+                    policy_version=policy_version,
+                    travel_times=cached,
+                    network_evidence=snap_evidence,
+                )
+                attempt_id = UUID(allocation["id"])
+                if not self._link_allocation(run_id, token, attempt_id):
+                    self._release_orphan(run_id, attempt_id)
+                    return
+        else:
+            attempt_id = existing_attempt
+            with timer.phase("RECOVER_ALLOCATION"), self.sessions() as session:
+                snapshot = session.get(AllocationDecisionSnapshotModel, attempt_id)
+                if snapshot is not None:
+                    snap_evidence = snapshot.inventory_data.get("network_coverage", [])
+        if not self._active(run_id, token):
+            return
+        with timer.phase("PREPARE_SOLVER"):
+            assigned, allocation_unassigned = self._decisions(attempt_id)
+            problem = prepared.problem(run_id, assigned, quality, self.timeout_seconds)
+        with timer.phase("SOLVER"):
+            solved = self.solver.solve(problem) if problem.tasks else self._empty_result(problem)
+        with timer.phase("RECONCILE"):
+            reconcile_result(problem, solved, self.max_snap_distance_m)
+            result = self._merge_unassigned(solved, allocation_unassigned)
+        self._finish(run_id, token, result, problem, snap_evidence, timer=timer)
+
+    def _prepare_run(
+        self, run_id: UUID,
+    ) -> tuple[PreparedRevision, UUID | None, SolutionQuality, str]:
         with self.sessions() as session:
             job = session.get(RevisionRunJobModel, run_id)
             run = session.get(PlanningRunModel, run_id)
@@ -430,56 +508,7 @@ class RevisionRunService:
                 raise RunInputError("REVISION_CONTEXT_CHANGED")
             quality = SolutionQuality(request_data["solution_quality"])
             policy_version = job.policy_version
-        if not self._active(run_id, token):
-            return
-        snap_evidence: list[dict[str, object]] = []
-        if existing_attempt is None:
-            origins = tuple(center.location for center in prepared.centers)
-            destinations = tuple(order.location for order in prepared.orders)
-            try:
-                checked = self.osrm.checked_duration_matrix(
-                    origins, destinations, self.max_snap_distance_m
-                )
-            except RoutingCoverageError as exc:
-                self._label_snaps(exc.evidence, prepared.centers, prepared.orders)
-                raise
-            matrix = checked.durations
-            snap_evidence = checked.snaps
-            self._label_snaps(snap_evidence, prepared.centers, prepared.orders)
-            for item in snap_evidence:
-                item["max_snap_distance_m"] = self.max_snap_distance_m
-            if not self._active(run_id, token):
-                return
-            cached = FrozenTravelTimes(origins, destinations, matrix)
-            allocation = self.allocation.allocate(
-                prepared.scenario_id,
-                self._revision_number(prepared.revision_id),
-                str(run_id),
-                policy_version=policy_version,
-                travel_times=cached,
-                network_evidence=snap_evidence,
-            )
-            attempt_id = UUID(allocation["id"])
-            if not self._link_allocation(run_id, token, attempt_id):
-                self._release_orphan(run_id, attempt_id)
-                return
-        else:
-            attempt_id = existing_attempt
-            with self.sessions() as session:
-                snapshot = session.get(AllocationDecisionSnapshotModel, attempt_id)
-                if snapshot is not None:
-                    snap_evidence = snapshot.inventory_data.get("network_coverage", [])
-        if not self._active(run_id, token):
-            return
-        assigned, allocation_unassigned = self._decisions(attempt_id)
-        problem = prepared.problem(run_id, assigned, quality, self.timeout_seconds)
-        if problem.tasks:
-            solved = self.solver.solve(problem)
-            reconcile_result(problem, solved, self.max_snap_distance_m)
-        else:
-            solved = self._empty_result(problem)
-        result = self._merge_unassigned(solved, allocation_unassigned)
-        self._finish(run_id, token, result, problem, snap_evidence)
+        return prepared, existing_attempt, quality, policy_version
 
     @staticmethod
     def _label_snaps(
@@ -677,6 +706,28 @@ class RevisionRunService:
     def _finish(
         self, run_id: UUID, token: UUID, result: OptimizationResult,
         problem: OptimizationProblem, snap_evidence: list[dict[str, object]],
+        *, timer: AttemptTimer | None = None,
+    ) -> bool:
+        if timer is not None:
+            timer.emit({"kind": "PHASE_STARTED", "phase": "PERSIST_RESULT",
+                        "occurred_at": datetime.now(UTC)})
+        persist_start = perf_counter_ns()
+        try:
+            return self._persist_result(
+                run_id, token, result, problem, snap_evidence, timer, persist_start,
+            )
+        except Exception:
+            if timer is not None:
+                timer.emit({"kind": "PHASE_FINISHED", "phase": "PERSIST_RESULT",
+                            "occurred_at": datetime.now(UTC), "outcome": "FAILED",
+                            "duration_ns": perf_counter_ns() - persist_start,
+                            "details": {"scope": "failed_persistence_call_including_rollback"}})
+            raise
+
+    def _persist_result(
+        self, run_id: UUID, token: UUID, result: OptimizationResult,
+        problem: OptimizationProblem, snap_evidence: list[dict[str, object]],
+        timer: AttemptTimer | None, persist_start: int,
     ) -> bool:
         data = to_primitive(result)
         kpis = DemoPlanningService._kpis(result)
@@ -743,6 +794,15 @@ class RevisionRunService:
                         reasons=item["reasons"],
                     )
                 )
+            session.flush()
+            if timer is not None:
+                append_timing(session, run_id, token, job.attempts, {
+                    "kind": "PHASE_FINISHED", "phase": "PERSIST_RESULT",
+                    "occurred_at": datetime.now(UTC), "outcome": "SUCCEEDED",
+                    "duration_ns": perf_counter_ns() - persist_start,
+                    "details": {"scope": "through_flush_excludes_final_commit"},
+                })
+                append_timing(session, run_id, token, job.attempts, timer.finish("READY"))
             job.lease_token = None
             job.lease_until = None
             self._transition(session, job, "READY", "SOLVER_RECONCILED")
@@ -751,6 +811,7 @@ class RevisionRunService:
     def _fail(
         self, run_id: UUID, token: UUID, code: str,
         snap_evidence: list[dict[str, object]] | None = None,
+        *, timer: AttemptTimer | None = None,
     ) -> None:
         with self.sessions.begin() as session:
             job = session.get(RevisionRunJobModel, run_id)
@@ -769,6 +830,10 @@ class RevisionRunService:
             ):
                 return
             self._change_reservations(session, run_id, "RELEASED", "RUN_FAILED")
+            if timer is not None:
+                append_timing(session, run_id, token, job.attempts, timer.finish("FAILED"))
+            else:
+                interrupt_attempt(session, job, "FAILURE_WITHOUT_TIMER")
             job.lease_token = None
             job.lease_until = None
             run = session.get(PlanningRunModel, run_id)
@@ -795,6 +860,7 @@ class RevisionRunService:
             if job.lease_until is not None and job.lease_until >= datetime.now(UTC):
                 return
             self._change_reservations(session, run_id, "RELEASED", "RETRY_LIMIT")
+            interrupt_attempt(session, job, "RETRY_LIMIT")
             job.lease_token = None
             job.lease_until = None
             run = session.get(PlanningRunModel, run_id)
@@ -835,6 +901,7 @@ class RevisionRunService:
             if job.status not in ("QUEUED", "RUNNING", "READY"):
                 raise PlanningRunError("RUN_TRANSITION_CONFLICT")
             self._change_reservations(session, run_id, "RELEASED", "RUN_CANCELED")
+            interrupt_attempt(session, job, "USER_CANCELED")
             job.lease_token = None
             job.lease_until = None
             self._transition(session, job, "CANCELED", "USER_CANCELED")

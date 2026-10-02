@@ -41,6 +41,7 @@ from routeops.application.import_validation import (
     validate_package,
 )
 from routeops.application.operating_cost import OperatingCostError
+from routeops.application.processing_times import AttemptTimer
 from routeops.application.revision_problem import (
     RunInputError,
     WorkloadLimits,
@@ -92,6 +93,7 @@ from routeops.infrastructure.persistence.models import (
     OptimizedRouteModel,
     OrderLineModel,
     OrderModel,
+    PlanningTimingEventModel,
     RevisionRunJobModel,
     ScenarioModel,
     ScenarioRevisionModel,
@@ -103,6 +105,7 @@ from routeops.infrastructure.persistence.operational_allocation import (
     AllocationError,
     OperationalAllocationService,
 )
+from routeops.infrastructure.persistence.plan_metrics import PlanMetricsQuery
 from routeops.infrastructure.persistence.planning_data_repository import (
     ImportBatchRepository,
     ScenarioRepository,
@@ -2118,6 +2121,19 @@ def test_revision_run_reaches_real_vroom_and_accepts_reservations(
     assert accepted["status"] == "ACCEPTED"
     assert accepted["decisions"][0]["reservation_status"] == "CONFIRMED"
     assert OperatingCostQuery(sessions).get(UUID(queued["run_id"])) == costs
+    query = PlanMetricsQuery(sessions)
+    before_metrics = query.get(UUID(queued["run_id"]))
+    assert before_metrics["current_status"] == "ACCEPTED"
+    metrics = before_metrics["plan"]["metrics"]
+    assert metrics["valid_input_orders"]["value"] == 1
+    assert metrics["allocated_orders"]["value"] == 1
+    assert metrics["routed_orders"]["value"] == 1
+    assert metrics["coverage"]["value"] == "1"
+    assert metrics["window_compliance"]["value"] == "1"
+    assert before_metrics["plan"]["operating_cost"] == costs
+    assert before_metrics["processing"]["active_all_attempts"]["value"] is not None
+    assert before_metrics["processing"]["attempts"][0]["outcome"] == "READY"
+    assert query.get(UUID(queued["run_id"])) == before_metrics
 
 
 def test_run_result_insert_failure_rolls_back_and_releases_holds(
@@ -2983,7 +2999,7 @@ def test_revision_run_migration_downgrade_preserves_prior_objects(
                 postgis_oid = connection.scalar(
                     text("SELECT oid FROM pg_extension WHERE extname='postgis'")
                 )
-            migrate(monkeypatch, url, "head")
+            migrate(monkeypatch, url, "c951e2a7d430")
             with engine.connect() as connection:
                 assert connection.scalar(text(TRIGGER_COUNT_SQL)) == before + 8
             command.downgrade(Config(str(ALEMBIC_INI)), "d42e4a91b6c0")
@@ -3258,3 +3274,229 @@ def test_fractional_time_is_rejected_before_run_or_reservation(
         assert session.scalar(select(func.count()).select_from(
             OperationalInventoryPositionModel
         )) == 0
+
+
+def test_metrics_multiline_unrouted_plan_survives_cancel_without_changing_facts(
+    database: Engine, tmp_path: Path,
+) -> None:
+    rows = _publication_rows()
+    rows["order_lines"].append({**rows["order_lines"][0], "sku": "SECOND"})
+    rows["inventory"].append({**rows["inventory"][0], "sku": "SECOND"})
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path, rows)
+    service = _revision_run_service(database)
+    submitted, _ = service.submit(scenario, 1, "metric-empty-route")
+    run_id = UUID(submitted["run_id"])
+    query = PlanMetricsQuery(service.sessions)
+    assert query.get(run_id)["plan"] is None
+    assert service.process_once()
+    before = query.get(run_id)
+    metrics = before["plan"]["metrics"]
+    assert metrics["valid_input_orders"]["value"] == 1  # two lines, one order
+    assert metrics["allocated_orders"]["value"] == 1
+    assert metrics["routed_orders"]["value"] == 0
+    assert metrics["unrouted_orders"]["value"] == 1
+    assert metrics["coverage"]["value"] == "0"
+    assert metrics["operating_cost"]["value"] == "0.0000"
+    assert metrics["window_compliance"]["value"] is None
+    assert before["plan"]["duty_balance"]["coefficient_of_variation"]["value"] is None
+    assert service.get(run_id)["decisions"][0]["reservation_status"] == "RELEASED"
+    service.cancel(run_id)
+    after = query.get(run_id)
+    assert after["current_status"] == "CANCELED"
+    assert after["plan"] == before["plan"]
+    assert after["processing"] == before["processing"]
+    assert after["provenance"] == before["provenance"]
+
+
+def test_metrics_recovery_fences_timing_and_retains_unknown_interrupted_phase(
+    database: Engine, tmp_path: Path,
+) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    service = _revision_run_service(database)
+    service.submit(scenario, 1, "metric-recovery")
+    first = service.claim()
+    assert first is not None
+    start_event = {"kind": "PHASE_STARTED", "phase": "SOLVER", "occurred_at": datetime.now(UTC)}
+    service._record_timing(*first, start_event)
+    with service.sessions.begin() as session:
+        job = session.get(RevisionRunJobModel, first[0])
+        assert job is not None
+        job.lease_until = datetime.now(UTC) - timedelta(seconds=1)
+    second = service.claim()
+    assert second is not None
+    with service.sessions() as session:
+        count = session.scalar(select(func.count()).select_from(PlanningTimingEventModel))
+    service._record_timing(*first, {**start_event, "phase": "LATE"})
+    with service.sessions() as session:
+        assert session.scalar(select(func.count()).select_from(PlanningTimingEventModel)) == count
+    # Database fencing also rejects a direct write from the replaced owner.
+    with pytest.raises(DBAPIError), service.sessions.begin() as session:
+        session.add(PlanningTimingEventModel(
+            run_id=first[0], attempt_no=1, owner_token=first[1],
+            kind="PHASE_FINISHED", phase="SOLVER",
+            occurred_at=datetime.now(UTC), duration_ns=1, outcome="SUCCEEDED",
+            calculation_version="processing-v1", details={},
+        ))
+    service._process(*second)
+    result = PlanMetricsQuery(service.sessions).get(first[0])
+    times = result["processing"]
+    assert times["active_all_attempts"]["value"] is None
+    assert times["measured_active_subtotal"]["value"] is not None
+    assert times["attempts"][0]["ended_at"] is None
+    assert times["attempts"][0]["phases"][0]["duration"]["value"] is None
+    assert times["attempts"][0]["outcome"] == "LEASE_RECOVERED"
+    assert times["retry_recovery_waits"][0]["value"] is None
+    assert times["attempts"][1]["outcome"] == "READY"
+
+
+def test_metrics_failed_solver_keeps_phases_and_released_stock(
+    database: Engine, tmp_path: Path,
+) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    service = _revision_run_service(database, BrokenSolver())
+    submitted, _ = service.submit(scenario, 1, "metric-failure")
+    assert service.process_once()
+    result = PlanMetricsQuery(service.sessions).get(UUID(submitted["run_id"]))
+    assert result["plan"] is None
+    assert result["current_status"] == "FAILED"
+    attempt = result["processing"]["attempts"][0]
+    assert attempt["active"]["value"] is not None
+    assert attempt["outcome"] == "FAILED"
+    solver = next(phase for phase in attempt["phases"] if phase["phase"] == "SOLVER")
+    assert solver["outcome"] == "FAILED" and solver["duration"]["value"] is not None
+    decisions = service.get(UUID(submitted["run_id"]))["decisions"]
+    assert decisions[0]["reservation_status"] == "RELEASED"
+
+
+def test_metrics_cancel_running_attempt_has_unknown_end_and_rejects_late_timing(
+    database: Engine, tmp_path: Path,
+) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    service = _revision_run_service(database)
+    service.submit(scenario, 1, "metric-cancel-running")
+    claim = service.claim()
+    assert claim is not None
+    service._record_timing(*claim, {"kind": "PHASE_STARTED", "phase": "PREPARE_OSRM",
+                                   "occurred_at": datetime.now(UTC)})
+    service.cancel(claim[0])
+    service._record_timing(*claim, {"kind": "PHASE_FINISHED", "phase": "PREPARE_OSRM",
+                                   "occurred_at": datetime.now(UTC), "duration_ns": 1})
+    times = PlanMetricsQuery(service.sessions).get(claim[0])["processing"]
+    assert times["total_elapsed"]["value"] is not None
+    assert times["active_all_attempts"]["value"] is None
+    assert times["attempts"][0]["outcome"] == "USER_CANCELED"
+    assert times["attempts"][0]["phases"][0]["duration"]["value"] is None
+
+
+def test_metrics_historical_demo_is_read_only_and_does_not_invent_input_or_timings(
+    database: Engine,
+) -> None:
+    sessions = create_session_factory(database)
+    repository = DatabaseRunRepository(sessions)
+    run_id = uuid4()
+    now = datetime.now(UTC)
+    repository.start(run_id, "Historical", now, {"dataset_name": "old"})
+    repository.complete(run_id, now + timedelta(seconds=5), {
+        "status": "SUCCEEDED", "routes": [], "unassigned": [],
+        "summary": {"objective_cost_units": 0, "cost_scale": 100, "currency": "CLP"},
+    }, {"estimated_cost": 0})
+    before = repository.get(run_id)
+    result = PlanMetricsQuery(sessions).get(run_id)
+    assert result["plan"]["metrics"]["valid_input_orders"]["value"] is None
+    assert result["plan"]["metrics"]["operating_cost"]["value"] == "0.0000"
+    assert result["processing"]["active_all_attempts"]["value"] is None
+    assert result["processing"]["total_elapsed"]["value"] == "5.0"
+    assert result["provenance"]["historical_derivation"]
+    assert repository.get(run_id) == before
+
+
+def test_processing_measurement_migration_empty_downgrade_preserves_history_and_postgis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with temporary_database() as url:
+        migrate(monkeypatch, url, "e3a1b7c9d240")
+        engine = create_engine(url)
+        try:
+            with engine.connect() as connection:
+                old_triggers = connection.scalar(text(TRIGGER_COUNT_SQL))
+                postgis = connection.scalar(text(
+                    "SELECT oid FROM pg_extension WHERE extname='postgis'"
+                ))
+            sessions = create_session_factory(engine)
+            run_id = uuid4()
+            DatabaseRunRepository(sessions).start(run_id, "Legacy data", datetime.now(UTC), {})
+            migrate(monkeypatch, url, "head")
+            command.downgrade(Config(str(ALEMBIC_INI)), "e3a1b7c9d240")
+            with engine.connect() as connection:
+                assert connection.scalar(text(TRIGGER_COUNT_SQL)) == old_triggers
+                assert connection.scalar(text(
+                    "SELECT oid FROM pg_extension WHERE extname='postgis'"
+                )) == postgis
+                assert connection.scalar(text(
+                    "SELECT to_regclass('planning_timing_events')"
+                )) is None
+                assert connection.scalar(text("SELECT count(*) FROM planning_runs")) == 1
+                assert connection.scalar(text(
+                    "SELECT to_regprocedure('routeops_guard_timing_event()')"
+                )) is None
+            migrate(monkeypatch, url, "head")
+            assert DatabaseRunRepository(sessions).get(run_id) is not None
+        finally:
+            engine.dispose()
+
+
+def test_processing_measurements_are_immutable_and_refuse_lossy_downgrade(
+    database: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+    service = _revision_run_service(database)
+    submitted, _ = service.submit(scenario, 1, "metric-immutable")
+    service.process_once()
+    with pytest.raises(DBAPIError), service.sessions.begin() as session:
+        session.execute(text("UPDATE planning_timing_events SET duration_ns=0"))
+    with pytest.raises(DBAPIError), service.sessions.begin() as session:
+        session.execute(text("DELETE FROM planning_timing_events"))
+    with pytest.raises(RuntimeError, match="processing measurements contain history"):
+        command.downgrade(Config(str(ALEMBIC_INI)), "e3a1b7c9d240")
+    api = importlib.import_module("routeops.api.main")
+    monkeypatch.setattr(api, "plan_metric_queries", PlanMetricsQuery(service.sessions))
+    with TestClient(api.app) as client:
+        response = client.get(f"/api/v1/runs/{submitted['run_id']}/metrics")
+        assert response.status_code == 200
+        assert response.json()["plan"]["calculation_version"] == "plan-metrics-v1"
+        objective = response.json()["plan"]["solver_objective"]
+        assert objective["unit"] == "scaled_currency_units"
+        assert objective["calculation_version"] == "persisted-solver-objective-v1"
+        assert "owner_token" not in response.text and "lease_token" not in response.text
+        missing = client.get(f"/api/v1/runs/{uuid4()}/metrics")
+        assert missing.status_code == 404 and missing.json()["code"] == "RUN_NOT_FOUND"
+
+
+def test_demo_failed_persistence_keeps_measured_phase_and_atomic_rollback(
+    database: Engine, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sessions = create_session_factory(database)
+    repository = DatabaseRunRepository(sessions)
+    run_id, token = uuid4(), uuid4()
+    now = datetime.now(UTC)
+    repository.start(run_id, "Faulted demo", now, {})
+    repository.record_timing(run_id, token, {"kind": "ATTEMPT_STARTED", "occurred_at": now})
+    timer = AttemptTimer(lambda event: repository.record_timing(run_id, token, event))
+
+    def fault(_: object) -> None:
+        raise OSError("synthetic persistence failure")
+
+    monkeypatch.setattr(repository, "_geometry", fault)
+    with pytest.raises(OSError):
+        repository.complete(run_id, now, {"status": "PARTIAL", "unassigned": [],
+                                         "routes": [{"geometry": []}]}, {},
+                            timer=timer, timing_token=token)
+    repository.fail(run_id, datetime.now(UTC), "TEST_FAILURE", timer=timer, timing_token=token)
+    result = PlanMetricsQuery(sessions).get(run_id)
+    assert result["plan"] is None and result["current_status"] == "FAILED"
+    attempt = result["processing"]["attempts"][0]
+    assert attempt["phases"][0]["phase"] == "PERSIST_RESULT"
+    assert attempt["phases"][0]["outcome"] == "FAILED"
+    assert attempt["phases"][0]["duration"]["value"] is not None
+    with sessions() as session:
+        assert session.scalar(select(func.count()).select_from(OptimizedRouteModel)) == 0

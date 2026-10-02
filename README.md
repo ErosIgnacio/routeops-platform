@@ -6,7 +6,7 @@ optimization, OSRM road costs, PostGIS persistence, and a React/MapLibre control
 center. All business data in this repository is synthetic.
 
 > Status: **Milestones 1 and 2 accepted and published; routing/UI corrections
-> accepted as `v0.2.1`. Delivery 3.1a is accepted; 3.1b follows on
+> accepted as `v0.2.1`. Delivery 3.1a is published; 3.1b is accepted on
 > `feat/m3-1-operation-analytics`.**
 >
 > Local Docker Desktop/WSL2 runtime, durable import/planning workers, transactional
@@ -42,6 +42,9 @@ stock reservations, acceptance/cancellation and recoverable history.
 B2B and B2C share the same explicit contracts. Labels do not activate implicit
 rules. Synthetic independent cases are planned for 3.1c. See the
 [3.1a contract matrix and cost foundation](docs/milestone-3-1a-contracts-costs.md).
+
+Delivery 3.1b adds [versioned plan KPIs and processing measurements](docs/milestone-3-1b-metrics.md),
+without changing historical plan results. Its acceptance records the explicit pre-commit timing boundary.
 
 ## Quick start
 
@@ -110,6 +113,7 @@ The import workspace, its recovery flow and performance measurements are in
 | `GET` | `/api/v1/runs/latest` | Return the newest persisted run |
 | `GET` | `/api/v1/runs/{run_id}` | Return one persisted run |
 | `GET` | `/api/v1/runs/{run_id}/estimated-operating-cost` | Versioned decimal business cost from persisted facts (accepted 3.1a) |
+| `GET` | `/api/v1/runs/{run_id}/metrics` | Plan KPIs, units/denominators/provenance, durable attempts and phase times (3.1b) |
 | `GET` | `/health/live` | Process liveness only |
 | `GET` | `/health/ready` | Aggregate database/VROOM/OSRM readiness |
 | `GET` | `/health/dependencies` | Per-dependency diagnostic status |

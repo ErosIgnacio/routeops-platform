@@ -229,4 +229,16 @@ from VROOM/OSRM; a missing total is rejected, never treated as zero. Normal plan
 for the later catalog, applicable to original and revision runs. Amounts are
 four-place decimal strings. It returns calculation version, provenance hashes
 and the unchanged solver objective separately. No historical `estimated_cost`
-is renamed or overwritten. See the [matrix, formula and pending route limits](milestone-3-1a-contracts-costs.md).
+is renamed or overwritten. See the [accepted matrix, formula and route limits](milestone-3-1a-contracts-costs.md).
+
+## 3.1b plan metric queries
+
+`GET /api/v1/runs/{run_id}/metrics` adds the versioned plan catalog and processing
+attempts/phases. Units, denominators and provenance accompany every KPI.
+Money remains Decimal; the persisted integer VROOM objective is separate.
+Maximum and temporal utilization use each capacity dimension independently,
+with a delivery remaining on board until service finishes. A canceled plan
+retains its calculated metrics; its current state/reservations are separate.
+Missing historical inputs and unobserved attempt ends are unavailable, never
+manufactured from current fixtures or lease expiry. The existing result and
+`kpis` contracts remain unchanged. See [formulas and examples](milestone-3-1b-metrics.md).

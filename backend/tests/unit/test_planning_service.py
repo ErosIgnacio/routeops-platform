@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID
 
 from routeops.application.planning import DemoPlanningService
+from routeops.application.processing_times import AttemptTimer
 from routeops.domain.models import Coordinate
 from routeops.domain.optimization import (
     OptimizationProblem,
@@ -181,6 +182,7 @@ class MemoryRunRepository:
         completed_at: datetime,
         result: dict[str, Any],
         kpis: dict[str, Any],
+        *, timer: AttemptTimer | None = None, timing_token: UUID | None = None,
     ) -> None:
         self.runs[run_id].update(
             status=result["status"],
@@ -189,7 +191,13 @@ class MemoryRunRepository:
             kpis=kpis,
         )
 
-    def fail(self, run_id: UUID, completed_at: datetime, error: str) -> None:
+    def record_timing(self, run_id: UUID, token: UUID, event: dict[str, Any]) -> None:
+        self.runs[run_id].setdefault("timings", []).append(event)
+
+    def fail(
+        self, run_id: UUID, completed_at: datetime, error: str,
+        *, timer: AttemptTimer | None = None, timing_token: UUID | None = None,
+    ) -> None:
         self.runs[run_id].update(
             status="FAILED", completed_at=completed_at.isoformat(), error=error
         )

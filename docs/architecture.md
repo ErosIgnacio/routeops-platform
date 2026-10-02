@@ -61,6 +61,10 @@ persistence mapper; its new cost formula and v1 input invariants remain neutral.
 - Ports for persistence, unit of work, solver, routing, clock, file parsing,
   export, and ID generation.
 - Transaction, idempotency, timeout, and retry orchestration.
+- 3.1b central plan/processing metric calculations derive from persisted facts;
+  query adapters supply immutable capacities/windows/rates and append-only
+  fenced timing boundaries. No metric formulas are implemented in controllers
+  or the frontend. See [3.1b scope and evidence](milestone-3-1b-metrics.md).
 
 ### Infrastructure
 
