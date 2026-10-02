@@ -15,11 +15,12 @@ inventory, KPI, or scenario rules.
 
 ## Delivery status and B2B/B2C
 
-Milestones 1–2 and `v0.2.1` are accepted. Manual baselines, comparison, the full
-indicator catalog and exports remain Milestone 3 scope; they are not current
-capabilities. 3.1a audits contracts and implements the business cost foundation.
+Milestones 1–2 and `v0.2.1` are accepted. Manual baselines, comparison and
+exports remain pending Milestone 3 scope. 3.1a supplies the business cost
+foundation; published 3.1b supplies the central indicator API. Their detailed
+analytics UI remains 3.3 scope.
 B2B and B2C share one architecture and explicit input fields. Independent
-synthetic cases are scheduled for 3.1c; labels activate no implicit rules.
+synthetic cases are implemented for review in 3.1c; labels activate no implicit rules.
 
 ## Actors
 
@@ -170,19 +171,30 @@ Reason records have `code`, `certainty` (`PROVEN` or `INFERRED`), human-readable
 detail, and structured evidence. Priority order avoids misleading diagnoses:
 
 1. invalid coordinates — proven during validation;
-2. no full stock coverage / no eligible center — proven during allocation;
+2. no full stock coverage / no eligible center — proven for recorded availability
+   at that policy decision, not for every possible joint allocation;
 3. no skill-compatible vehicle — proven by set inclusion;
 4. demand exceeds every compatible vehicle's individual capacity — proven;
-5. impossible time window even under direct travel lower bound — proven when
-   the bound is conclusive, otherwise inferred;
+5. window/service cannot fit the effective vehicle/CD/horizon shift even with
+   zero travel — proven for the assigned center and evaluated compatible fleet;
+   an OSRM direct route is not automatically a universal lower bound;
 6. shift or fleet-wide packing infeasibility — inferred unless conclusive.
    Optional distance/driving/task maxima now constrain VROOM requests and are
-   checked on response; conclusive reason attribution remains for 3.1c;
+   checked on response. 3.1c records their context without asserting individual
+   causality; a task-count shortfall can be proven collectively for the fixed
+   center assignment when every vehicle has a defined maximum;
 7. solver unassigned without conclusive local cause — inferred;
 8. excessive road snap/no route coverage — proven coverage failure before
    reserving stock, distinct from an infrastructure outage;
 9. routing/solver error — proven operational failure, not business
    infeasibility.
+
+Allocation keeps published umbrella codes as primary, matching recorded
+decisions, with specific skill/capacity evidence as supplementary reasons.
+For solver omissions, a conclusive local cause precedes the generic inferred
+omission. Input incidences remain separate from run diagnostics. Sources,
+calculation version and evaluated scope accompany reasons; historical reads
+never use today's inventory. See [3.1c catalog and evidence](milestone-3-1c-diagnostics.md).
 
 ## Non-functional requirements
 

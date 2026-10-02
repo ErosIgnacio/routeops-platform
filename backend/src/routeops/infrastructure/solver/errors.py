@@ -1,10 +1,11 @@
-class SolverDependencyError(RuntimeError):
-    """The solver or its routing dependency could not complete a valid request."""
+"""Backward-compatible gateway failure imports."""
 
-
-class SolverInputError(ValueError):
-    """The solver rejected an invalid optimization problem."""
-
-
-class SolverResponseError(RuntimeError):
-    """The solver returned a response that failed defensive reconciliation."""
+from routeops.application.ports.errors import (
+    SolverDependencyError as SolverDependencyError,
+)
+from routeops.application.ports.errors import (
+    SolverInputError as SolverInputError,
+)
+from routeops.application.ports.errors import (
+    SolverResponseError as SolverResponseError,
+)

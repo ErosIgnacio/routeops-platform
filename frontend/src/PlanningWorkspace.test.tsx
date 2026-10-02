@@ -56,6 +56,22 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("published revision planning", () => {
+  it("keeps an additive diagnostic code and its certainty readable", async () => {
+    api.getRun.mockResolvedValue({
+      ...queued, status: "READY", result: { routes: [], unassigned: [{
+        order_id: "ORD-SERVICE", stage: "OPTIMIZATION", reasons: [
+          { code: "WINDOW_SERVICE_SHIFT_INFEASIBLE", certainty: "PROVEN", detail: "Service cannot fit", evidence: { diagnostic: { calculation_version: "diagnostics-v1" } } },
+          { code: "SOLVER_NO_FEASIBLE_ROUTE", certainty: "INFERRED", detail: "Solver omission", evidence: {} },
+        ],
+      }] },
+    });
+    localStorage.setItem("routeops.planning.v1", JSON.stringify({ scenarioId: "scenario-1", revisionNo: 1, key: "key", runId: "run-1" }));
+    render(<PlanningWorkspace />);
+    expect(await screen.findByText("WINDOW_SERVICE_SHIFT_INFEASIBLE")).toBeTruthy();
+    expect(screen.getByText("Comprobado")).toBeTruthy();
+    expect(screen.getByText(/ORD-SERVICE/)).toBeTruthy();
+  });
+
   it("recovers a lost submission response using its saved key", async () => {
     localStorage.setItem("routeops.planning.v1", JSON.stringify({ scenarioId: "scenario-1", revisionNo: 1, key: "stable-key", runId: "" }));
     render(<PlanningWorkspace />);

@@ -5,7 +5,9 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
+from routeops.application.diagnostics import diagnose_result
 from routeops.application.optimization_reconciliation import reconcile_result
+from routeops.application.ports.errors import operational_failure_code
 from routeops.application.ports.gateways import RunRepository, SolverGateway
 from routeops.application.processing_times import AttemptTimer
 from routeops.application.serialization import to_primitive
@@ -93,6 +95,12 @@ class DemoPlanningService:
             with timer.phase("RECONCILE"):
                 reconcile_result(problem, solver_result)
                 result = self._merge_unassigned(solver_result, allocation.unassigned)
+                result = diagnose_result(result, problem, {}, {
+                    "run_id": str(run_id), "source": "original_demo_decision_evidence",
+                    "dataset_name": scenario.dataset_name, "dataset_seed": scenario.dataset_seed,
+                    "policy_version": self._allocation.version,
+                    "map_dataset_sha256": self._map_dataset_sha256,
+                })
             completed_at = datetime.now(UTC)
             kpis = self._kpis(result)
             self._repository.complete(
@@ -103,7 +111,7 @@ class DemoPlanningService:
                 timer=timer, timing_token=token,
             )
         except Exception as exc:
-            self._repository.fail(run_id, datetime.now(UTC), str(exc)[:1000],
+            self._repository.fail(run_id, datetime.now(UTC), operational_failure_code(exc),
                                   timer=timer, timing_token=token)
             raise
         persisted = self._repository.get(run_id)

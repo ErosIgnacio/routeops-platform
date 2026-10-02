@@ -101,6 +101,7 @@ class OperationalAllocationPolicy:
                     {
                         "vehicle_id": vehicle.id,
                         "skills_compatible": order.required_skills.issubset(vehicle.skills),
+                        "skills": sorted(vehicle.skills),
                         "capacity_compatible": vehicle.fits(order),
                         "capacity_units": vehicle.capacity_units,
                         "capacity_weight_kg": str(vehicle.capacity_weight_kg),
@@ -176,6 +177,12 @@ class OperationalAllocationPolicy:
                         "order_priority": order.priority,
                         "window_end": order.time_window_end.isoformat(),
                         "required_skills": sorted(order.required_skills),
+                        "required": required,
+                        "demand": {"units": sum(line.quantity for line in order.lines),
+                                   "weight_kg": str(sum((line.quantity * line.unit_weight_kg
+                                                         for line in order.lines), Decimal(0))),
+                                   "volume_m3": str(sum((line.quantity * line.unit_volume_m3
+                                                         for line in order.lines), Decimal(0)))},
                         "chosen_center_id": chosen,
                         "reason_code": reason,
                         "candidates": candidates,

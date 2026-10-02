@@ -156,7 +156,7 @@ Acceptance criteria:
 
 ## Milestone 3 — operation and analytics
 
-Status: **3.1a published; 3.1b accepted; closing publication authorized**, based on published
+Status: **3.1 accepted; closing publication authorized**, based on published
 `v0.2.1` (`0241a5168d9f7c02a152cf3614bf502659ea33b3`). One branch,
 `feat/m3-1-operation-analytics`, serves the three parts of 3.1.
 
@@ -172,10 +172,16 @@ Approved sequence:
 4. **3.2:** manual plan and comparison of strategies.
 5. **3.3:** interface, exports and integrated acceptance.
 
-See [the 3.1a report](milestone-3-1a-contracts-costs.md). 3.1c remains pending.
+See [the 3.1a report](milestone-3-1a-contracts-costs.md).
 3.1a closed at `87f765079c1b03e5e76dfced795a04a32347920b` in local/remote main
 and the shared branch. See [3.1b formulas and targeted evidence](milestone-3-1b-metrics.md).
-The joint backend/integration/migration/smoke/demo/frontend gate follows 3.1c.
+3.1b closed at `f21effb531a92fe556708989e93a79bde4209588` in local/remote main
+and the shared branch. The [3.1c report](milestone-3-1c-diagnostics.md) records
+the implemented diagnostics, five isolated cases and joint backend, HTTP,
+migration, real smoke/demo and frontend validation. Two obsolete downgrade
+expectations were corrected and the affected tests passed. Acceptance on
+2026-10-02 authorizes publishing 3.1c and implementing 3.2 on the single branch
+`feat/m3-2-plan-comparison` after the confirmed 3.1 fast-forward. 3.3 has not started.
 `v0.3.0` is reserved for acceptance of the whole milestone. Existing import and
 solver limits and the OSRM extract remain unchanged. B2B/B2C labels add no
 implicit constraints or integration services.

@@ -26,6 +26,7 @@ CATALOG = (
     ("shared_stock_restricted", "Stock compartido y pedido restringido"),
     ("fleet_restrictions", "Restricciones de flota"),
 )
+DatasetRows = dict[str, list[dict[str, str]]]
 
 
 def demo_rows(demo: AllocationDemo) -> dict[str, list[dict[str, str]]]:
@@ -137,8 +138,14 @@ class DemoCatalogService:
         demos = allocation_demos()
         if name not in demos:
             raise ValueError("DEMO_NOT_FOUND")
-        scenario_id: UUID = self.scenarios.create(f"Demo 2.4 · {name}")
-        package = _package(self.storage, demo_rows(demos[name]))
+        return self.prepare_rows(f"Demo 2.4 · {name}", name, demo_rows(demos[name]))
+
+    def prepare_rows(
+        self, title: str, name: str, rows: DatasetRows,
+    ) -> dict[str, Any]:
+        """Reuse upload/validation/publication; every preparation has independent stock."""
+        scenario_id: UUID = self.scenarios.create(title)
+        package = _package(self.storage, rows)
         batch_id, _ = self.uploads.create(scenario_id, "demo-fixture", package)
         context = ValidationContext(
             planning_date=date(2026, 10, 15),

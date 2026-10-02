@@ -1,7 +1,14 @@
 # Entrega 3.1b — KPIs del plan y tiempos de procesamiento
 
-Estado: **implementada para revisión; sin commit ni push**. Rama común:
-`feat/m3-1-operation-analytics`. No se inició 3.1c, 3.2 ni 3.3.
+Estado: **aceptada y publicada el 2026-10-02**. Rama común:
+`feat/m3-1-operation-analytics`. Commit `f21effb531a92fe556708989e93a79bde4209588`,
+autor/committer Eros Moreno <erosignacio.m@gmail.com>, mensaje
+`feat: add plan metrics and durable processing measurements`.
+Se revisaron los 25 archivos y pasó `git diff --cached --check`; push de la rama,
+fast-forward y push de main verificados directamente en origin. Etiquetas intactas.
+La [continuación 3.1c](milestone-3-1c-diagnostics.md) incluye la validación integral
+conjunta; permanece sin commit ni push. No se inició 3.2 ni 3.3.
+Los resultados y el bloque Git de la revisión previa se conservan como historial.
 
 ## Cierre confirmado de 3.1a
 
@@ -245,7 +252,7 @@ frontend desde Windows en `http://127.0.0.1:5173/` (`200`). La petición al nomb
 interno `frontend` recibió `403` de la protección de hosts de Vite; al usar el
 host local autorizado respondió `200`. No se cambió esa protección.
 
-## Archivos y estado Git final
+## Archivos y estado Git de la revisión previa al cierre
 
 Repositorio: `C:\Users\erosi\Desktop\routeops-platform`.
 Rama activa `feat/m3-1-operation-analytics`, HEAD de cierre 3.1a
@@ -281,21 +288,21 @@ nuevos y `git diff --check` aprobadas; sin secretos ni artefactos incorporados.
 ?? docs/milestone-3-1b-metrics.md
 ```
 
-## Comprobaci?n final del l?mite de confirmaci?n (3.1b)
+## Comprobación final del límite de confirmación (3.1b)
 
-`total_elapsed` conserva su valor hist?rico, derivado de timestamps UTC; se
-clasifica expl?citamente `PARTIAL`, con `derivation=RECONSTRUCTED` y
+`total_elapsed` conserva su valor histórico, derivado de timestamps UTC; se
+clasifica explícitamente `PARTIAL`, con `derivation=RECONSTRUCTED` y
 `endpoint=transition_timestamp_before_final_commit`. El instante final se toma
-dentro de la transacci?n, despu?s del flush y antes del COMMIT. Que la fila sea
+dentro de la transacción, después del flush y antes del COMMIT. Que la fila sea
 visible durablemente al consultar no convierte ese timestamp en un acuse del
-commit. Ni el env?o, espera o acuse del COMMIT ni el acuse HTTP est?n medidos.
+commit. Ni el envío, espera o acuse del COMMIT ni el acuse HTTP están medidos.
 `durable_total_elapsed` es `null`, `UNKNOWN`, motivo `COMMIT_ACK_NOT_RECORDED`.
-No se agrega una duraci?n estimada ni se reescribe la historia.
+No se agrega una duración estimada ni se reescribe la historia.
 
 La cola y esperas entre intentos son `RECONSTRUCTED` con timestamps; duraciones
-monot?nicas son `MEASURED` dentro del alcance declarado, intervalos faltantes
+monotónicas son `MEASURED` dentro del alcance declarado, intervalos faltantes
 `UNKNOWN` y el subtotal de intentos incompletos `PARTIAL`. Un total directo no
 es una suma de fases. Los KPIs del plan siguen siendo reconstrucciones de
-hechos inmutables, no mediciones de ejecuci?n f?sica. Esta precisi?n del
-contrato se comprob? con las pruebas de tiempos, Ruff y mypy; la validaci?n
-integral se realizar? despu?s de 3.1c.
+hechos inmutables, no mediciones de ejecución física. Esta precisión del
+contrato se comprobó con seis pruebas de tiempos, Ruff y mypy antes de publicar.
+La validación integral posterior está registrada en el informe 3.1c.

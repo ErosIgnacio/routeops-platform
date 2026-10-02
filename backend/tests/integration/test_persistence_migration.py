@@ -788,6 +788,8 @@ def test_revisions_keys_links_and_downgrade_guard(
     database: Engine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    with database.connect() as connection:
+        starting_head = connection.scalar(text("SELECT version_num FROM alembic_version"))
     scenarios = ScenarioRepository(create_session_factory(database))
     scenario_id = scenarios.create("Test")
     one = seed_revision(database, scenario_id, 1)
@@ -870,7 +872,7 @@ def test_revisions_keys_links_and_downgrade_guard(
     with pytest.raises(RuntimeError, match="downgrade blocked"):
         command.downgrade(Config(str(ALEMBIC_INI)), "20260924_0001")
     with database.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "c951e2a7d430"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == starting_head
 
 
 def test_quantities_costs_geometry_and_immutability(database: Engine) -> None:
@@ -3456,7 +3458,8 @@ def test_processing_measurements_are_immutable_and_refuse_lossy_downgrade(
         session.execute(text("UPDATE planning_timing_events SET duration_ns=0"))
     with pytest.raises(DBAPIError), service.sessions.begin() as session:
         session.execute(text("DELETE FROM planning_timing_events"))
-    with pytest.raises(RuntimeError, match="processing measurements contain history"):
+    # A later diagnostic guard now rejects this complete downgrade before the timing guard.
+    with pytest.raises(RuntimeError, match="diagnostics contain history"):
         command.downgrade(Config(str(ALEMBIC_INI)), "e3a1b7c9d240")
     api = importlib.import_module("routeops.api.main")
     monkeypatch.setattr(api, "plan_metric_queries", PlanMetricsQuery(service.sessions))

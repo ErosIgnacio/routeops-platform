@@ -9,12 +9,15 @@ from geoalchemy2.elements import WKTElement
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from routeops.application.diagnostics import failure_document, result_document
 from routeops.application.processing_times import AttemptTimer
+from routeops.infrastructure.persistence.diagnostics import persist_diagnostics
 from routeops.infrastructure.persistence.models import (
     OptimizedRouteModel,
     PlanningRunModel,
     UnassignedOrderModel,
 )
+from routeops.infrastructure.persistence.operating_costs import _hash
 from routeops.infrastructure.persistence.processing_times import append_timing
 
 
@@ -95,6 +98,11 @@ class DatabaseRunRepository:
                 )
 
             session.flush()
+            if timing_token is not None:
+                persist_diagnostics(session, run_id, result_document(result, {
+                    "run_id": str(run_id), "input_sha256": _hash(run.input_data),
+                    "source": "persisted_original_demo_result", "solver": result.get("solver"),
+                }), timing_token, 1)
             if timer is not None and timing_token is not None:
                 append_timing(session, run_id, timing_token, 1, {
                     "kind": "PHASE_FINISHED", "phase": "PERSIST_RESULT",
@@ -118,6 +126,12 @@ class DatabaseRunRepository:
             run = session.get(PlanningRunModel, run_id)
             if run is None:
                 return
+            run.error = error
+            if timing_token is not None:
+                persist_diagnostics(session, run_id, failure_document(error, {
+                    "run_id": str(run_id), "input_sha256": _hash(run.input_data),
+                    "source": "synchronous_demo_failure",
+                }), timing_token, 1)
             if timer is not None and timing_token is not None:
                 append_timing(session, run_id, timing_token, 1, timer.finish("FAILED"))
             run.status = "FAILED"

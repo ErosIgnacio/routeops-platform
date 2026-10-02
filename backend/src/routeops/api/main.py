@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from routeops.api.logging import configure_logging
+from routeops.application.diagnostics import validation_diagnostics
 from routeops.application.import_context import (
     CONTRACT_VERSION,
     VALIDATOR_VERSION,
@@ -32,11 +33,13 @@ from routeops.domain.policies.allocation import DeterministicAllocationPolicy
 from routeops.infrastructure.config import Settings
 from routeops.infrastructure.data import SyntheticScenarioLoader
 from routeops.infrastructure.data.demo_catalog import DemoCatalogService
+from routeops.infrastructure.data.operation_cases import CASE_NAMES, case_rows
 from routeops.infrastructure.persistence import (
     DatabaseRunRepository,
     create_database_engine,
     create_session_factory,
 )
+from routeops.infrastructure.persistence.diagnostics import DiagnosticQuery
 from routeops.infrastructure.persistence.import_publication import (
     ImportPublicationService,
     PublicationError,
@@ -69,6 +72,7 @@ sessions = create_session_factory(engine)
 repository = DatabaseRunRepository(sessions)
 operating_costs = OperatingCostQuery(sessions)
 plan_metric_queries = PlanMetricsQuery(sessions)
+diagnostic_queries = DiagnosticQuery(sessions)
 scenario_repository = ScenarioRepository(sessions)
 object_storage = LocalObjectStorage(settings.import_storage_root)
 upload_service = UploadService(
@@ -425,6 +429,21 @@ def publish_import(scenario_id: UUID, batch_id: UUID, response: Response) -> dic
     return result
 
 
+@app.get("/api/v1/scenarios/{scenario_id}/imports/{batch_id}/diagnostics", tags=["imports"])
+def get_validation_diagnostics(
+    scenario_id: UUID, batch_id: UUID, after: int = 0, limit: int = 100,
+) -> dict[str, Any]:
+    state = validation_service.get(scenario_id, batch_id)
+    return validation_diagnostics(
+        validation_service.issues(scenario_id, batch_id, after=after, limit=limit),
+        {"batch_id": str(batch_id), "stage": "VALIDATION",
+         "source": "immutable_validation_issues", "report": state["report"],
+         "contract_version": state["contract_version"],
+         "validator_version": state["validator_version"],
+         "context_sha256": state["context_sha256"], "package_sha256": state["package_sha256"]},
+    )
+
+
 @app.get("/api/v1/scenarios/{scenario_id}/imports/{batch_id}/publication", tags=["imports"])
 def get_import_publication(scenario_id: UUID, batch_id: UUID) -> dict[str, Any]:
     return publication_service.get_by_batch(scenario_id, batch_id)
@@ -488,6 +507,20 @@ def list_allocation_demos() -> list[dict[str, str]]:
     return demo_catalog.list()
 
 
+@app.get("/api/v1/operation-cases", tags=["planning"])
+def list_operation_cases() -> list[str]:
+    return list(CASE_NAMES)
+
+
+@app.post("/api/v1/operation-cases/{name}/prepare", tags=["planning"])
+def prepare_operation_case(name: str) -> dict[str, Any]:
+    try:
+        rows = case_rows(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="OPERATION_CASE_NOT_FOUND") from exc
+    return demo_catalog.prepare_rows(f"Synthetic 3.1c · {name}", name, rows)
+
+
 @app.post("/api/v1/allocation-demos/{name}/prepare", tags=["planning"])
 def prepare_allocation_demo(name: str) -> dict[str, Any]:
     try:
@@ -512,6 +545,15 @@ def get_estimated_operating_cost(run_id: UUID) -> dict[str, Any]:
 @app.get("/api/v1/runs/{run_id}/metrics", tags=["planning"])
 def get_plan_metrics(run_id: UUID) -> dict[str, Any]:
     return plan_metric_queries.get(run_id)
+
+
+@app.get("/api/v1/runs/{run_id}/diagnostics", tags=["planning"])
+def get_run_diagnostics(
+    run_id: UUID, offset: int = 0, limit: int = 100,
+    stage: str | None = None, code: str | None = None, certainty: str | None = None,
+) -> dict[str, Any]:
+    return diagnostic_queries.get(run_id, offset=offset, limit=limit,
+                                  stage=stage, code=code, certainty=certainty)
 
 
 @app.get("/api/v1/runs/{run_id}", tags=["planning"])

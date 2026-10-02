@@ -19,6 +19,7 @@ from geoalchemy2.elements import WKTElement
 from sqlalchemy import String, cast, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from routeops.application.diagnostics import diagnose_result, failure_document, result_document
 from routeops.application.planning import DemoPlanningService
 from routeops.application.ports.gateways import SolverGateway
 from routeops.application.processing_times import AttemptTimer
@@ -45,6 +46,7 @@ from routeops.domain.optimization import (
 )
 from routeops.domain.policies.allocation import TravelTimeProvider
 from routeops.domain.policies.operational_allocation import OperationalAllocationPolicy
+from routeops.infrastructure.persistence.diagnostics import persist_diagnostics
 from routeops.infrastructure.persistence.models import (
     AllocationAttemptModel,
     AllocationDecisionSnapshotModel,
@@ -60,6 +62,7 @@ from routeops.infrastructure.persistence.models import (
     ScenarioRevisionModel,
     UnassignedOrderModel,
 )
+from routeops.infrastructure.persistence.operating_costs import _hash
 from routeops.infrastructure.persistence.operational_allocation import (
     AllocationError,
     OperationalAllocationService,
@@ -481,6 +484,14 @@ class RevisionRunService:
         with timer.phase("RECONCILE"):
             reconcile_result(problem, solved, self.max_snap_distance_m)
             result = self._merge_unassigned(solved, allocation_unassigned)
+            result = diagnose_result(result, problem, self._diagnostic_allocations(attempt_id), {
+                "run_id": str(run_id), "revision_id": str(prepared.revision_id),
+                "content_sha256": prepared.content_sha256,
+                "context_sha256": prepared.context_sha256,
+                "normalized_problem_sha256": _hash(to_primitive(problem)),
+                "allocation_attempt_id": str(attempt_id), "policy_version": policy_version,
+                "source": "immutable_revision_and_allocation_decisions",
+            })
         self._finish(run_id, token, result, problem, snap_evidence, timer=timer)
 
     def _prepare_run(
@@ -582,6 +593,17 @@ class RevisionRunService:
                     )
                 )
         return True
+
+    def _diagnostic_allocations(self, attempt_id: UUID) -> dict[str, dict[str, Any]]:
+        with self.sessions() as session:
+            return {
+                source_id: {**decision.evidence, "allocation_decision_id": str(decision.id)}
+                for decision, source_id in session.execute(
+                    select(AllocationOrderDecisionModel, OrderModel.source_id)
+                    .join(OrderModel, AllocationOrderDecisionModel.order_id == OrderModel.id)
+                    .where(AllocationOrderDecisionModel.attempt_id == attempt_id)
+                )
+            }
 
     def _decisions(self, attempt_id: UUID) -> tuple[dict[str, str], tuple[UnassignedTask, ...]]:
         with self.sessions() as session:
@@ -795,6 +817,12 @@ class RevisionRunService:
                     )
                 )
             session.flush()
+            persist_diagnostics(session, run_id, result_document(data, {
+                "run_id": str(run_id), "input_sha256": _hash(run.input_data),
+                "scenario_revision_id": str(run.scenario_revision_id),
+                "allocation_attempt_id": str(job.allocation_attempt_id),
+                "solver": data["solver"], "source": "committed_result_and_recorded_decisions",
+            }), token, job.attempts)
             if timer is not None:
                 append_timing(session, run_id, token, job.attempts, {
                     "kind": "PHASE_FINISHED", "phase": "PERSIST_RESULT",
@@ -830,6 +858,14 @@ class RevisionRunService:
             ):
                 return
             self._change_reservations(session, run_id, "RELEASED", "RUN_FAILED")
+            run = session.get(PlanningRunModel, run_id)
+            assert run is not None
+            run.error = code
+            persist_diagnostics(session, run_id, failure_document(code, {
+                "run_id": str(run_id), "input_sha256": _hash(run.input_data),
+                "scenario_revision_id": str(run.scenario_revision_id),
+                "source": "fenced_worker_failure",
+            }, snap_evidence), token, job.attempts)
             if timer is not None:
                 append_timing(session, run_id, token, job.attempts, timer.finish("FAILED"))
             else:
@@ -860,6 +896,13 @@ class RevisionRunService:
             if job.lease_until is not None and job.lease_until >= datetime.now(UTC):
                 return
             self._change_reservations(session, run_id, "RELEASED", "RETRY_LIMIT")
+            run = session.get(PlanningRunModel, run_id)
+            assert run is not None
+            run.error = "RUN_RETRY_LIMIT"
+            persist_diagnostics(session, run_id, failure_document("RUN_RETRY_LIMIT", {
+                "run_id": str(run_id), "input_sha256": _hash(run.input_data),
+                "source": "lease_recovery_retry_limit",
+            }), None, job.attempts)
             interrupt_attempt(session, job, "RETRY_LIMIT")
             job.lease_token = None
             job.lease_until = None

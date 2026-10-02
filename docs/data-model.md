@@ -13,6 +13,13 @@ trigger enforce fencing and immutability. Downgrade refuses nonempty telemetry;
 no historical backfill or change to previous PostGIS objects is performed.
 The metric catalog is read-only derivation, not a replacement of stored
 results. See [3.1b formulas, provenance and migration evidence](milestone-3-1b-metrics.md).
+The 3.1c candidate adds `planning_diagnostics` at `a71c9e3d602b`, following
+`f6b2d8a4c190`: one immutable JSONB document per run (PK/FK RESTRICT), calculation
+version, SHA-256, UTC creation timestamp and internal owner/attempt provenance.
+The guard checks lease fencing and exact result/failure correspondence before
+the final transition. Document, result and reserve compensation share a
+transaction. Downgrade refuses nonempty history; no backfill or modification
+of previous results/PostGIS objects occurs. See [migration and query evidence](milestone-3-1c-diagnostics.md).
 The descriptions below retain the 2.2 foundation; subsequent schema/state
 rules are detailed in the accepted 2.3, 2.4 and 2.5 guides.
 

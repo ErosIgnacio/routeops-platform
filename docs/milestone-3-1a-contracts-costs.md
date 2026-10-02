@@ -3,9 +3,16 @@
 Estado: **aceptada formalmente; cierre autorizado el 2026-10-02**. Base publicada
 `v0.2.1`/`main`: `0241a5168d9f7c02a152cf3614bf502659ea33b3`.
 Rama común de 3.1: `feat/m3-1-operation-analytics`. Este informe corresponde
-exclusivamente a 3.1a; 3.1b se desarrolla después de su cierre y 3.1c sigue pendiente.
+exclusivamente a la revisión histórica de 3.1a; sus resultados y estados Git
+de aquella revisión se conservan como antecedentes fechados.
 La aceptación conserva las comprobaciones documentadas abajo; el cierre solo
 actualiza documentación y no repite pruebas sin un cambio funcional.
+
+Seguimiento 2026-10-02: 3.1a se publicó en `87f765079c1b03e5e76dfced795a04a32347920b`
+y 3.1b en `f21effb531a92fe556708989e93a79bde4209588`. 3.1c está implementada,
+sin commit/push, con [diagnósticos, casos y validación integral conjunta](milestone-3-1c-diagnostics.md).
+Las secciones de preparación y estado Git inferiores describen la revisión
+anterior, no pendientes actuales ni nuevas ejecuciones de esas pruebas.
 
 ## Diseño vigente y alcance
 
@@ -55,6 +62,24 @@ Los tests negativos mutan una respuesta válida con servicio y espera calculable
 comprueban que no puede convertirse en un resultado aceptado. La conciliación
 se comparte entre el adaptador, la demo original y el coordinador de revisiones.
 Se conserva la compensación existente ante `SolverResponseError`.
+
+### Correspondencia con diagnósticos 3.1c
+
+Esta extensión explica hechos registrados sin alterar la matriz de mapeo.
+Referencias: `application/diagnostics.py`, `unit/test_diagnostics.py`,
+`integration/test_planning_diagnostics.py` y `integration/test_m31_http_diagnostics.py`.
+
+| Regla de la matriz | Diagnóstico / alcance | Comprobación |
+|---|---|---|
+| Validación de entrada | Incidencia existente, etapa VALIDATION, sin convertirla en pedido de una corrida | COORDINATE_RANGE orders/fila2/latitude; API separada |
+| Cobertura stock completa | STOCK_NO_FULL_COVERAGE PROVEN en disponibilidad registrada en esa decisión; consumo previo explícito | Original ORD-003 y greedy compartido; no inviabilidad conjunta |
+| Skills y capacidad individual 3D | NO_COMPATIBLE_VEHICLE principal histórico; NO_SKILL_COMPATIBLE_VEHICLE / INDIVIDUAL_CAPACITY_EXCEEDED suplementarios PROVEN | B2B skills, unidades, peso y volumen; scope con flota/CDs evaluados |
+| Ventanas, servicio, jornada/CD/horizonte | WINDOW_SERVICE_SHIFT_INFEASIBLE PROVEN si ni con viaje cero cabe en la flota del CD fijo | Igualdad exacta, exceso de un segundo y B2B servicio largo |
+| Máximos de ruta/conducción/tareas | VEHICLE_LIMITS_CONTEXT INFERRED sobre causa; FLEET_TASK_LIMIT_SHORTFALL PROVEN colectivo si todos los máximos están definidos | B2C 6 pedidos/max_tasks2, variante distancia1m/conducción1s; sin cota OSRM inventada |
+| Omisión sin prueba local | SOLVER_NO_FEASIBLE_ROUTE INFERRED; una prueba local precede a este contexto | Precedencia y conservación del código/resultados |
+| Cobertura y fallos de proveedor | Observación operacional PROVEN, no falta de inventario ni inviabilidad comercial | Rollback, fencing obsoleto, compensación de HELD y consultas inmutables |
+
+Ver el catálogo completo y sus limitaciones en el informe 3.1c.
 
 Una validación estructural o contextual de importación no garantiza que una
 revisión sea ejecutable. La precisión de instantes del solver se comprueba antes

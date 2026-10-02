@@ -39,9 +39,10 @@ vroom-express -------------------------------> OSRM
 
 The intended boundaries point inward. Domain imports neither FastAPI,
 SQLAlchemy, Pydantic transport schemas nor VROOM JSON. The existing application
-revision-preparation module reads SQLAlchemy models and uses infrastructure
-error classes directly; this is an implementation dependency, not a claim of
-strict isolation in every application module. 3.1a does not relocate that
+revision-preparation module reads SQLAlchemy models directly; this is an
+implementation dependency, not a claim of strict isolation in every application
+module. Routing/solver exceptions now belong to application ports, with old
+infrastructure imports reexported for compatibility. 3.1a does not relocate that
 persistence mapper; its new cost formula and v1 input invariants remain neutral.
 
 ## Responsibilities
@@ -65,6 +66,13 @@ persistence mapper; its new cost formula and v1 input invariants remain neutral.
   query adapters supply immutable capacities/windows/rates and append-only
   fenced timing boundaries. No metric formulas are implemented in controllers
   or the frontend. See [3.1b scope and evidence](milestone-3-1b-metrics.md).
+- 3.1c central diagnostics explain reconciled results using recorded stock,
+  fleet, normalized inputs and source hashes. The persistence adapter stores the
+  immutable document in the same fenced transaction as results, compensation
+  and terminal processing transition. Queries validate its hash and reproduce
+  recorded reasons; they do not consult current inventory. Input incidences and
+  operational failures have separate scopes. No external call is added while
+  holding stock locks. See [3.1c catalog and tests](milestone-3-1c-diagnostics.md).
 
 ### Infrastructure
 

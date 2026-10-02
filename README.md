@@ -6,8 +6,8 @@ optimization, OSRM road costs, PostGIS persistence, and a React/MapLibre control
 center. All business data in this repository is synthetic.
 
 > Status: **Milestones 1 and 2 accepted and published; routing/UI corrections
-> accepted as `v0.2.1`. Delivery 3.1a is published; 3.1b is accepted on
-> `feat/m3-1-operation-analytics`.**
+> accepted as `v0.2.1`. Delivery 3.1 is accepted, including contracts, costs,
+> KPIs, diagnostics and synthetic B2B/B2C cases.**
 >
 > Local Docker Desktop/WSL2 runtime, durable import/planning workers, transactional
 > inventory reservations, real OSRM/VROOM and browser workflows are verified in
@@ -40,7 +40,8 @@ executes immutable revisions with isolated demos, auditable center choices,
 stock reservations, acceptance/cancellation and recoverable history.
 
 B2B and B2C share the same explicit contracts. Labels do not activate implicit
-rules. Synthetic independent cases are planned for 3.1c. See the
+rules. Five reproducible independent cases and persisted diagnostics are available
+in [3.1c, including the joint 3.1 validation](docs/milestone-3-1c-diagnostics.md). See the
 [3.1a contract matrix and cost foundation](docs/milestone-3-1a-contracts-costs.md).
 
 Delivery 3.1b adds [versioned plan KPIs and processing measurements](docs/milestone-3-1b-metrics.md),
@@ -114,6 +115,10 @@ The import workspace, its recovery flow and performance measurements are in
 | `GET` | `/api/v1/runs/{run_id}` | Return one persisted run |
 | `GET` | `/api/v1/runs/{run_id}/estimated-operating-cost` | Versioned decimal business cost from persisted facts (accepted 3.1a) |
 | `GET` | `/api/v1/runs/{run_id}/metrics` | Plan KPIs, units/denominators/provenance, durable attempts and phase times (3.1b) |
+| `GET` | `/api/v1/runs/{run_id}/diagnostics` | Persisted explanations, certainty, scope and provenance; paginated filters (3.1c) |
+| `GET` | `/api/v1/scenarios/{scenario_id}/imports/{batch_id}/diagnostics` | Input incidences kept separate from run exclusions (3.1c) |
+| `GET` | `/api/v1/operation-cases` | Reproducible B2B/B2C case names (3.1c) |
+| `POST` | `/api/v1/operation-cases/{name}/prepare` | Import, validate and publish into a new isolated scenario (3.1c) |
 | `GET` | `/health/live` | Process liveness only |
 | `GET` | `/health/ready` | Aggregate database/VROOM/OSRM readiness |
 | `GET` | `/health/dependencies` | Per-dependency diagnostic status |

@@ -69,6 +69,32 @@ class PlanningRunModel(Base):
     )
 
 
+class PlanningDiagnosticModel(Base):
+    __tablename__ = "planning_diagnostics"
+
+    run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("planning_runs.id", ondelete="RESTRICT"), primary_key=True
+    )
+    calculation_version: Mapped[str] = mapped_column(String(30), nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    document: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    owner_token: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("content_sha256 ~ '^[0-9a-f]{64}$'", name="ck_diagnostics_hash"),
+        CheckConstraint("attempt_no >= 0", name="ck_diagnostics_attempt"),
+        CheckConstraint(
+            "jsonb_typeof(document->'unassigned') IS NOT DISTINCT FROM 'array' "
+            "AND jsonb_typeof(document->'operational') IS NOT DISTINCT FROM 'array' "
+            "AND jsonb_typeof(document->'provenance') IS NOT DISTINCT FROM 'object' "
+            "AND jsonb_array_length(document->'operational') <= 1",
+            name="ck_diagnostics_document",
+        ),
+    )
+
+
 class PlanningTimingEventModel(Base):
     __tablename__ = "planning_timing_events"
 

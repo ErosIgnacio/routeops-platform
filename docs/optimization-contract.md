@@ -211,7 +211,7 @@ VROOM does not provide a definitive business reason for each unassigned job.
 matching `OptimizationProblem`. The application coordinator merges allocation
 exclusions with the solver result
 and updates counts before persistence. A `PlanningOutcome` DTO and the full
-layered explanation service were initial design ideas; 3.1c owns the latter.
+layered explanation service were initial design ideas; 3.1c implements the latter.
 It never labels an inference as proven.
 
 ## 3.1a response integrity and cost query
@@ -242,3 +242,21 @@ retains its calculated metrics; its current state/reservations are separate.
 Missing historical inputs and unobserved attempt ends are unavailable, never
 manufactured from current fixtures or lease expiry. The existing result and
 `kpis` contracts remain unchanged. See [formulas and examples](milestone-3-1b-metrics.md).
+
+## 3.1c recorded explanations
+
+The shared application service enriches the reconciled `unassigned.reasons`
+without changing the solver-neutral problem, allocation policy, objective or
+reservation amounts. Existing reason fields and codes remain compatible;
+version, scope and provenance are additive structured evidence. The immutable
+diagnostic document stores exactly these final reasons in the result transaction.
+The paginated `/api/v1/runs/{run_id}/diagnostics` query reproduces their order
+as PRIMARY/SUPPLEMENTARY and verifies hashes/correspondence. Historical reads
+use only recorded old reasons, never new fixtures or live inventory.
+Skills, individual capacity and zero-travel temporal impossibility can be
+proven within the evaluated scope. Solver omission and optional limit context
+remain inferred unless a specific necessary-condition proof is available;
+collective task pressure is not an individual attribution. Import incidences
+and operational faults are distinct from business exclusions. No solver or
+contract version changes are needed for this additive evidence.
+See [catalog, limits and reproducible cases](milestone-3-1c-diagnostics.md).
