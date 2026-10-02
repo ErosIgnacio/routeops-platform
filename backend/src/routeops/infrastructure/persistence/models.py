@@ -554,6 +554,9 @@ class VehicleModel(Base):
     fixed_cost: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
     cost_per_hour: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
     cost_per_km: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
+    max_route_distance_meters: Mapped[int | None] = mapped_column(Integer)
+    max_driving_seconds: Mapped[int | None] = mapped_column(Integer)
+    max_delivery_tasks: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
@@ -576,6 +579,15 @@ class VehicleModel(Base):
         CheckConstraint("source_row_number > 1", name="ck_vehicles_row"),
         CheckConstraint("capacity_units > 0", name="ck_vehicles_units"),
         CheckConstraint("shift_start < shift_end", name="ck_vehicles_shift"),
+        *(
+            CheckConstraint(
+                f"{column} IS NULL OR {column} BETWEEN 1 AND 2147483647",
+                name=f"ck_vehicles_{column}",
+            )
+            for column in (
+                "max_route_distance_meters", "max_driving_seconds", "max_delivery_tasks"
+            )
+        ),
         CheckConstraint("routeops_valid_skills(skills)", name="ck_vehicles_skills"),
         CheckConstraint(
             "capacity_weight_kg > 0 AND capacity_weight_kg::text NOT IN "

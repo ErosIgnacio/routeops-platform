@@ -1,5 +1,14 @@
 # Architecture and repository structure
 
+## Current implementation versus initial design
+
+This document retains the initial logical boundaries and illustrative layout.
+Milestone 2 and v0.2.1 implement private uploads (`ObjectStorageGateway`),
+PostgreSQL validation/planning jobs with leases, immutable revisions, operating
+stock/reservations and `/imports` and `/planning`. Baselines, comparison, the
+full indicator catalog and exports remain Milestone 3 work, not current APIs.
+B2B/B2C use the same modules and explicit fields; no business-label dispatch.
+
 ## Architectural style
 
 RouteOps is a **modular monolith** with a React single-page application and
@@ -28,9 +37,12 @@ Domain ------------------- entities, policies, solver-neutral contracts
 vroom-express -------------------------------> OSRM
 ```
 
-Dependencies point inward: `api` and `infrastructure` depend on `application`
-and `domain`; the domain imports neither FastAPI, SQLAlchemy, Pydantic transport
-schemas, nor VROOM JSON shapes.
+The intended boundaries point inward. Domain imports neither FastAPI,
+SQLAlchemy, Pydantic transport schemas nor VROOM JSON. The existing application
+revision-preparation module reads SQLAlchemy models and uses infrastructure
+error classes directly; this is an implementation dependency, not a claim of
+strict isolation in every application module. 3.1a does not relocate that
+persistence mapper; its new cost formula and v1 input invariants remain neutral.
 
 ## Responsibilities
 
@@ -67,10 +79,10 @@ schemas, nor VROOM JSON shapes.
 
 ## Runtime decisions
 
-- Synchronous HTTP is sufficient for the portfolio MVP. Optimization runs have
-  an explicit server-side timeout and a database state transition. If measured
-  workloads exceed safe request duration, a durable job runner becomes a later
-  ADR; Redis/Celery are not pre-installed.
+- Original demo optimization retains synchronous HTTP. Imported revision runs
+  and validation use durable PostgreSQL jobs with owner tokens, heartbeat,
+  bounded retries and fenced completion; no Redis/Celery. READY reservations
+  do not expire automatically. External routing calls do not hold stock locks.
 - VROOM is the only solver. The application depends on `SolverGateway.solve()`;
   only `VroomAdapter` knows VROOM integer IDs, array capacities, encoded
   polylines, or error codes.
@@ -81,7 +93,7 @@ schemas, nor VROOM JSON shapes.
   protect shared inventory. Application checks improve error messages but do
   not replace database guarantees.
 
-## Proposed repository layout
+## Initial illustrative repository layout
 
 ```text
 routeops-platform/
@@ -155,7 +167,13 @@ root `tests/e2e` holds cross-stack tests only. Runtime-generated OSRM artifacts,
 uploads, and exports are ignored and mounted into named volumes or a controlled
 application data directory.
 
-## Principal API resources
+The actual implementation uses application modules directly under `application`,
+`infrastructure/persistence/revision_runs.py` for the durable coordinator and
+`api/main.py` for transport. The tree above is the initial conceptual layout,
+not a list of files that still need to be created. In 3.1a a read-only
+`OperatingCostQuery` derives versioned costs without altering historical JSON.
+
+## Principal API resources (initial resource boundaries)
 
 - `POST /api/v1/scenarios`
 - `POST /api/v1/scenarios/{id}/imports`
@@ -181,6 +199,7 @@ slice; this list defines resource boundaries, not a frozen HTTP contract.
 - Outbound VROOM/OSRM calls use connection/read timeouts. Only transport-level
   and selected 5xx failures are retried with bounded exponential backoff; input
   and routing-domain errors are not retried.
-- Raw integration payloads are stored for audit behind a size limit and never
-  leak into domain objects or normal logs.
+- Normalized results, immutable decision evidence, versions and hashes are
+  stored for audit. Raw vendor payload retention remains an initial proposal,
+  not implemented storage; provider JSON does not leak into domain DTOs.
 - Health endpoints distinguish process liveness from dependency readiness.

@@ -16,10 +16,15 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from routeops.api.logging import configure_logging
-from routeops.application.import_context import ValidationContext
+from routeops.application.import_context import (
+    CONTRACT_VERSION,
+    VALIDATOR_VERSION,
+    ValidationContext,
+)
 from routeops.application.import_contract import DATASETS
 from routeops.application.import_templates import csv_template, xlsx_template
 from routeops.application.import_upload import UploadError, receive_package
+from routeops.application.operating_cost import OperatingCostError
 from routeops.application.planning import DemoPlanningService
 from routeops.application.revision_problem import RunInputError
 from routeops.domain.optimization import SolutionQuality
@@ -41,6 +46,7 @@ from routeops.infrastructure.persistence.import_validation_jobs import (
     ValidationJobError,
     ValidationJobService,
 )
+from routeops.infrastructure.persistence.operating_costs import OperatingCostQuery
 from routeops.infrastructure.persistence.operational_allocation import OperationalAllocationService
 from routeops.infrastructure.persistence.planning_data_repository import ScenarioRepository
 from routeops.infrastructure.persistence.revision_runs import PlanningRunError, RevisionRunService
@@ -60,6 +66,7 @@ logger = logging.getLogger("routeops.api")
 engine = create_database_engine(settings.database_url)
 sessions = create_session_factory(engine)
 repository = DatabaseRunRepository(sessions)
+operating_costs = OperatingCostQuery(sessions)
 scenario_repository = ScenarioRepository(sessions)
 object_storage = LocalObjectStorage(settings.import_storage_root)
 upload_service = UploadService(
@@ -158,8 +165,8 @@ class RequestValidation(BaseModel):
     timezone_iana: str
     currency: str
     operational_area: dict[str, Any] | None = None
-    contract_version: str = "2.1"
-    validator_version: str = "2.3b.1"
+    contract_version: str = CONTRACT_VERSION
+    validator_version: str = VALIDATOR_VERSION
 
 
 @app.exception_handler(UploadError)
@@ -188,7 +195,10 @@ def publication_error(_: Request, exc: PublicationError) -> JSONResponse:
 
 @app.exception_handler(PlanningRunError)
 @app.exception_handler(RunInputError)
-def revision_run_error(_: Request, exc: PlanningRunError | RunInputError) -> JSONResponse:
+@app.exception_handler(OperatingCostError)
+def revision_run_error(
+    _: Request, exc: PlanningRunError | RunInputError | OperatingCostError,
+) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={"code": exc.code, "detail": "Planning request could not be completed."},
@@ -490,6 +500,11 @@ def latest_run() -> dict[str, object]:
     if result is None:
         raise HTTPException(status_code=404, detail="No planning runs are available")
     return result
+
+
+@app.get("/api/v1/runs/{run_id}/estimated-operating-cost", tags=["planning"])
+def get_estimated_operating_cost(run_id: UUID) -> dict[str, Any]:
+    return operating_costs.get(run_id)
 
 
 @app.get("/api/v1/runs/{run_id}", tags=["planning"])

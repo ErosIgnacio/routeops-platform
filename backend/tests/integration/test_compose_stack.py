@@ -33,6 +33,14 @@ def test_real_stack_routes_and_persists_demo() -> None:
 
         persisted = client.get(f"/api/v1/runs/{run['run_id']}")
         persisted.raise_for_status()
+        cost_response = client.get(f"/api/v1/runs/{run['run_id']}/estimated-operating-cost")
+        cost_response.raise_for_status()
+        cost = cost_response.json()
+        assert cost["calculation_version"] == "operating-cost-v1"
+        assert cost["provenance"]["rate_source"] == "persisted_demo_rate_snapshot"
+        assert len(cost["routes"]) == len(run["result"]["routes"])
+        assert cost["solver_objective"]["units"] == run["result"]["summary"]["objective_cost_units"]
+        assert client.get(f"/api/v1/runs/{run['run_id']}/estimated-operating-cost").json() == cost
 
     assert run["status"] in {"SUCCEEDED", "PARTIAL"}
     assert run["kpis"]["routes"] >= 1

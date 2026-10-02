@@ -13,6 +13,14 @@ VROOM is the only optimization engine in v1. It is accessed through an internal
 solver port so a future engine can be added without changing allocation,
 inventory, KPI, or scenario rules.
 
+## Delivery status and B2B/B2C
+
+Milestones 1–2 and `v0.2.1` are accepted. Manual baselines, comparison, the full
+indicator catalog and exports remain Milestone 3 scope; they are not current
+capabilities. 3.1a audits contracts and implements the business cost foundation.
+B2B and B2C share one architecture and explicit input fields. Independent
+synthetic cases are scheduled for 3.1c; labels activate no implicit rules.
+
 ## Actors
 
 - **Planner:** creates scenarios, imports data, runs planning, reviews maps and
@@ -31,8 +39,9 @@ RouteOps v1 is single-user and has no authentication or authorization model.
 3. Strict schema, relational, and business validation with row-level errors and
    warnings. An import is published atomically only when it has no errors.
 4. Multiple distribution centers, per-SKU stock, and heterogeneous fleets.
-5. One-CD-per-order allocation using a documented deterministic greedy
-   heuristic. It is explicitly not presented as a global optimum.
+5. One-CD-per-order allocation: `alternatives-v2` is the revision default,
+   `greedy-v1` remains available for comparison; the original demo retains greedy.
+   Neither heuristic is presented as a global optimum.
 6. Transactional inventory snapshots and reservations, with idempotent retry
    behavior and no double consumption between concurrent planning runs.
 7. Capacity dimensions for units, weight, and volume; work shifts; delivery
@@ -51,7 +60,7 @@ RouteOps v1 is single-user and has no authentication or authorization model.
 
 ## Out of scope
 
-- Splitting an order across distribution centers.
+- Splitting an order across distribution centers or deliveries.
 - Inventory transfers, replenishment, pre-consolidation, substitution, lots, or
   expiry dates.
 - Direct WMS/ERP/TMS integrations.
@@ -61,39 +70,34 @@ RouteOps v1 is single-user and has no authentication or authorization model.
 - Multi-user authentication, authorization, tenancy, and audit identities.
 - Redis, Celery, Kubernetes, or independently deployed application
   microservices.
-- Production hosting, publishing, and `git push`.
+- Production hosting and network access beyond the trusted local machine.
+- Palletization, dock appointments, returns and driver tracking.
 
 Extension points may be named and modeled, but no inactive framework or
 placeholder implementation will be built for these exclusions.
 
 ## Core workflow and state guards
 
-```text
-DRAFT
-  -> DATA_VALIDATED
-  -> SNAPSHOT_READY
-  -> STOCK_RESERVED
-  -> OPTIMIZING
-  -> COMPLETED | COMPLETED_WITH_UNASSIGNED | FAILED
+The initial DRAFT-to-COMPLETED design is now represented by separate resources:
 
-DRAFT..STOCK_RESERVED -> CANCELLED
-FAILED/CANCELLED       -> reservations released when applicable
-```
+- Scenario: `ACTIVE` / `ARCHIVED`; published revisions are immutable.
+- Import: `RECEIVED → VALIDATING → VALID | INVALID | FAILED`; `VALID → PUBLISHED`.
+  Expiration is an append-only retention record and blocks publication.
+- Imported run: `QUEUED → RUNNING → READY → ACCEPTED | CANCELED`, or `FAILED`.
+  Leases, owner tokens and bounded retries recover interrupted workers.
+- Complete per-order HELD reserves are created atomically with decision evidence.
+  Solver-unassigned orders release every line. Acceptance confirms; cancellation
+  and failure release only the run's held stock, never external reservations.
+- External calls hold no inventory locks. New revisions preserve active reserves.
+  READY runs do not expire automatically. Reruns create distinct runs.
 
-- A scenario cannot take a snapshot until the whole import package passes.
-- Snapshot, allocation, and reservation form one consistency boundary.
-- Optimization cannot start without active reservations for every allocated
-  order.
-- A run is immutable after completion. A re-run creates a new planning run.
-- Accepting a plan commits its reservations; cancellation/failure releases held
-  reservations according to the explicit state transition.
 
 ## Allocation policy v1
 
 Available stock is:
 
 ```text
-available = on_hand - reserved - safety_stock
+available = on_hand - externally_reserved - safety_stock - active_routeops_reserved
 ```
 
 Orders are processed deterministically by:
@@ -103,8 +107,7 @@ Orders are processed deterministically by:
 3. stable `order_id` ascending.
 
 For each order, a distribution center is eligible only when it can cover all
-order lines and has at least one potentially compatible vehicle. Eligible
-centers are ranked by:
+order lines and has at least one potentially compatible vehicle. For `greedy-v1`, eligible centers are ranked by:
 
 1. OSRM estimated travel duration from the center to the order, ascending;
 2. post-allocation inventory slack, descending;
@@ -115,11 +118,15 @@ orders see the reduced availability. If no center covers all lines, the order
 gets the proven reason `STOCK_NO_FULL_COVERAGE`. Routing feasibility remains
 VROOM's responsibility; prechecks are diagnostics, not claims of optimality.
 
-If OSRM is unavailable while ranking multiple otherwise eligible centers, the
-run fails explicitly rather than silently changing the policy. A future policy
-port can replace this heuristic.
+`alternatives-v2` first maximizes the number of remaining orders that retain
+at least one stock-and-fleet alternative after the hypothetical assignment,
+then uses the same duration/slack/ID tie breaks. Order sequence is unchanged.
+This is one-step lookahead, not a solution to joint packing or a global optimum.
 
-## KPI definitions
+If OSRM is unavailable while ranking multiple otherwise eligible centers, the
+run fails explicitly rather than silently changing the policy. The implemented policy boundary permits evaluated alternatives.
+
+## KPI definitions (complete catalog scheduled for 3.1b)
 
 Every KPI includes its unit and denominator. Undefined ratios return `null`,
 not zero.
@@ -143,7 +150,9 @@ not zero.
 Estimated business cost is recomputed from persisted route duty time, distance,
 and fixed cost using exact decimals. VROOM's integer objective is a scaled
 optimization proxy; any engine limitation around the pricing of waiting time is
-reported with the run rather than hidden in the KPI.
+reported separately. `kpis.estimated_cost` remains the historical scaled solver
+objective. 3.1a adds a versioned read-only estimated-operating-cost query; no
+existing cost field is silently repurposed.
 
 ## Unassigned-order explanations
 
@@ -156,10 +165,13 @@ detail, and structured evidence. Priority order avoids misleading diagnoses:
 4. demand exceeds every compatible vehicle's individual capacity — proven;
 5. impossible time window even under direct travel lower bound — proven when
    the bound is conclusive, otherwise inferred;
-6. shift, max distance/time/tasks, or fleet-wide packing infeasibility —
-   inferred unless a conclusive check is available;
+6. shift or fleet-wide packing infeasibility — inferred unless conclusive.
+   Optional distance/driving/task maxima now constrain VROOM requests and are
+   checked on response; conclusive reason attribution remains for 3.1c;
 7. solver unassigned without conclusive local cause — inferred;
-8. routing/solver error — proven operational failure, not business
+8. excessive road snap/no route coverage — proven coverage failure before
+   reserving stock, distinct from an infrastructure outage;
+9. routing/solver error — proven operational failure, not business
    infeasibility.
 
 ## Non-functional requirements

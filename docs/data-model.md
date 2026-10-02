@@ -2,8 +2,12 @@
 
 Delivery 2.2 adds a versioned, audit-ready persistence foundation. The physical
 schema lives in Alembic revision `525a2c8f3a8c`, following `20260924_0001`.
-Delivery 2.3 will implement provisional import and atomic publication; delivery
-2.4 will add mutable operating inventory, allocations, and reservations.
+Deliveries 2.3–2.5 now implement private provisional imports, contextual
+validation, atomic publication, scenario-wide operating stock, allocations,
+reservations and durable planning. The 3.1a candidate extends the current
+Alembic head to `e3a1b7c9d240` with nullable vehicle route limits.
+The descriptions below retain the 2.2 foundation; subsequent schema/state
+rules are detailed in the accepted 2.3, 2.4 and 2.5 guides.
 
 ## Scenario and time model
 
@@ -20,14 +24,14 @@ version, package hash, and an absolute `[horizon_start_at, horizon_end_at)`
 interval stored as `timestamptz`. Milestone 2 supports one operating day. Center
 hours and vehicle shifts are local SQL `time` values, with start before end and
 no overnight shift. A database check keeps the absolute half-open horizon
-within `planning_date` in the revision's timezone. Publication in 2.3 will
-reject nonexistent or ambiguous
+within `planning_date` in the revision's timezone. Contextual validation and
+publication replay in 2.3 reject nonexistent or ambiguous
 local times caused by daylight-saving transitions and order windows outside the
 revision horizon. These checks need the revision context and are not claimed by
 the structure-only validation in 2.1.
 
 `operational_area` is nullable `geometry(MultiPolygon, 4326)`. Without an area,
-there is no territorial validation. With an area, 2.3 will use `ST_Covers` so
+there is no territorial validation. With an area, 2.3 uses `ST_Covers` so
 points exactly on its boundary are inside; outside orders or centers initially
 receive a warning. Global coordinate range and finiteness remain required.
 
@@ -56,7 +60,7 @@ scenarios ──< scenario_revisions (one source import batch per revision)
 | `distribution_centers` | UUID PK; unique `(revision_id, source_id)` | Point 4326, name, local operating hours and source provenance |
 | `orders` | UUID PK; unique `(revision_id, source_id)` | Point 4326, priority, absolute window, service time, required skills, provenance |
 | `order_lines` | UUID PK; unique `(order_id, sku)` | Positive `BIGINT` quantity, exact `NUMERIC` weight and volume, provenance |
-| `vehicles` | UUID PK; unique `(revision_id, source_id)` | Same-revision home center, exact capacities/costs, local shift, skills, provenance |
+| `vehicles` | UUID PK; unique `(revision_id, source_id)` | Same-revision home center, exact capacities/costs, local shift, skills, optional positive distance/driving/task limits, provenance |
 | `inventory_snapshots` | UUID PK; at most one `IMPORTED` snapshot per revision | Snapshot instant, kind, content hash, creation audit |
 | `inventory_snapshot_lines` | UUID PK; unique `(snapshot_id, distribution_center_id, sku)` | Imported stock, external reservations, safety stock, availability, provenance |
 
@@ -72,7 +76,8 @@ window, status, and inventory lookup; GiST indexes cover points and area.
 The five CSV files each have one `import_files` record. An XLSX workbook has
 one record with dataset `workbook`, referenced by rows from all five sheets.
 The database stores no file bytes or absolute local paths. The key is opaque;
-an `ObjectStorageGateway` and private physical storage belong to 2.3.
+the implemented `ObjectStorageGateway` accesses a private named volume; there
+is no original-download endpoint.
 
 ## Quantities, geometry, and skills
 
@@ -83,7 +88,7 @@ before publication or execution; no persisted calculation uses binary float.
 `externally_reserved_quantity` always denotes reservations imported from the
 source system. Imported availability equals stock on hand minus external
 reservations and safety stock. `routeops_reserved_quantity` is zero in the
-initial imported snapshot. Delivery 2.4 introduces scenario-wide operational
+initial imported snapshot. Delivery 2.4 implemented scenario-wide operational
 positions and separate RouteOps reservation lines. Their generated availability
 subtracts external reservations, safety stock, and active RouteOps reservations
 exactly once. See [the 2.4 allocation design](milestone-2-4-allocation.md).
@@ -118,16 +123,27 @@ The downgrade to `20260924_0001` refuses to run if any 2.2 table has data or
 any run references a revision or snapshot. On an empty 2.2 schema it removes
 the new schema and leaves milestone 1 runs intact.
 
-## Subsequent delivery rules
+## Implemented subsequent delivery rules
 
 In 2.3, files remain provisional until every required dataset validates with
 zero `ERROR` issues. A package with all five datasets empty may validate its
-structure but cannot be published. A transaction will create a fresh revision,
-all imported rows, and its single initial inventory snapshot, then update the
+structure but cannot be published. A transaction creates a fresh revision,
+all imported rows, and its single initial inventory snapshot, then updates the
 batch state and append its publication event. An idempotency key and content
-hash will make retries return the existing revision without duplication.
+hash make retries return the existing revision without duplication.
 
 A nonempty scenario that cannot be optimized will receive an explicit
-diagnosis before any call to VROOM. Delivery 2.4 prepares allocation and
-reservations; execution of imported revisions joins them in 2.5. VROOM
+diagnosis before any call to VROOM. Delivery 2.4 implements allocation and
+reservations; imported execution joins
+them in 2.5 with leases, immutable results and per-order transitions. VROOM
 continues to be reached exclusively through `SolverGateway`.
+
+## 3.1a cost provenance (no schema migration)
+
+The new read-only cost query reads persisted `optimized_routes.payload` and
+cross-checks the stored distance/duty columns and `planning_runs.result_data`.
+Imported vehicle rates come from the same immutable scenario revision. New
+original-demo runs record decimal rate strings in their input metadata; old
+demos lacking that snapshot return `COST_RATES_NOT_RECORDED`. The calculation
+version and SHA-256 of rates and route facts are returned without modifying
+previous runs or reports. Legacy `kpis.estimated_cost` remains the solver proxy.

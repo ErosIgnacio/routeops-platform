@@ -18,6 +18,7 @@ export type ImportFile = {
 export type ImportBatch = {
   id: string;
   scenario_id: string;
+  parser_version?: string;
   status: "RECEIVED" | "VALIDATING" | "VALID" | "INVALID" | "FAILED" | "PUBLISHED" | "EXPIRED";
   package_sha256: string;
   created_at: string;
@@ -68,6 +69,8 @@ export type ValidationContext = {
   timezone_iana: string;
   currency: string;
   operational_area: Record<string, unknown> | null;
+  contract_version?: string;
+  validator_version?: string;
 };
 
 export type Revision = {

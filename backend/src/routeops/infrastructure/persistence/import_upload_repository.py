@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
+from routeops.application.import_context import CONTRACT_VERSION
 from routeops.application.import_upload import ReceivedPackage, UploadError
 from routeops.application.ports.object_storage import ObjectStorageGateway
 from routeops.infrastructure.persistence.models import (
@@ -83,7 +84,7 @@ class UploadService:
                             scenario_id=scenario_id,
                             client_key=client_key,
                             package_sha256=package.sha256,
-                            parser_version="2.1",
+                            parser_version=CONTRACT_VERSION,
                             status="RECEIVED",
                             version=1,
                             created_at=now,
@@ -158,6 +159,7 @@ class UploadService:
                 "scenario_id": str(batch.scenario_id),
                 "status": "EXPIRED" if expired else batch.status,
                 "package_sha256": batch.package_sha256,
+                "parser_version": batch.parser_version,
                 "created_at": batch.created_at.isoformat(),
                 "expired_at": expiration.expired_at.isoformat() if expiration else None,
                 "expires_at": (

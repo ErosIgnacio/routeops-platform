@@ -356,6 +356,10 @@ export function ImportWorkspace() {
     setBusy("validation");
     try {
       const payload = contextPayload(context);
+      if (batch?.parser_version === "2.1") {
+        payload.contract_version = "2.1";
+        payload.validator_version = "2.3b.1";
+      }
       remember({ context });
       const result = await requestValidation(scenarioId, batchId, payload);
       setValidation(result);

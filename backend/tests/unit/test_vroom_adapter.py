@@ -84,66 +84,85 @@ def test_health_proves_vroom_can_reach_osrm() -> None:
     }
 
 
+def response_payload() -> dict:
+    return {
+        "code": 0,
+        "summary": {
+            "routes": 1,
+            "unassigned": 0,
+            "distance": 4000,
+            "duration": 1200,
+            "service": 600,
+            "waiting_time": 100,
+            "cost": 1234,
+        },
+        "routes": [
+            {
+                "vehicle": 1,
+                "cost": 1234,
+                "distance": 4000,
+                "duration": 1200,
+                "service": 600,
+                "waiting_time": 100,
+                "geometry": "nedkE~wgnLo}@o}@n}@n}@",
+                "steps": [
+                    {
+                        "type": "start",
+                        "location": [-70.66, -33.45],
+                        "arrival": 2900,
+                        "duration": 0,
+                        "distance": 0,
+                        "load": [2, 2000, 4000],
+                    },
+                    {
+                        "type": "job",
+                        "id": 1,
+                        "location": [-70.65, -33.44],
+                        "arrival": 3500,
+                        "duration": 600,
+                        "distance": 2000,
+                        "service": 600,
+                        "waiting_time": 100,
+                        "load": [0, 0, 0],
+                    },
+                    {
+                        "type": "end",
+                        "location": [-70.66, -33.45],
+                        "arrival": 4800,
+                        "duration": 1200,
+                        "distance": 4000,
+                        "load": [0, 0, 0],
+                    },
+                ],
+            }
+        ],
+        "unassigned": [],
+    }
+
+
 @respx.mock
 def test_maps_and_reconciles_vroom_response() -> None:
+    import json
+
     captured: dict[str, object] = {}
 
     def responder(request: httpx.Request) -> httpx.Response:
-        captured.update(__import__("json").loads(request.content))
-        return httpx.Response(
-            200,
-            json={
-                "code": 0,
-                "routes": [
-                    {
-                        "vehicle": 1,
-                        "cost": 1234,
-                        "distance": 4000,
-                        "duration": 1200,
-                        "service": 600,
-                        "waiting_time": 0,
-                        "steps": [
-                            {
-                                "type": "start",
-                                "location": [-70.66, -33.45],
-                                "arrival": 0,
-                                "duration": 0,
-                                "distance": 0,
-                                "load": [2, 2000, 4000],
-                            },
-                            {
-                                "type": "job",
-                                "job": 1,
-                                "location": [-70.65, -33.44],
-                                "arrival": 900,
-                                "duration": 600,
-                                "distance": 2000,
-                                "service": 600,
-                                "waiting_time": 0,
-                                "load": [0, 0, 0],
-                            },
-                            {
-                                "type": "end",
-                                "location": [-70.66, -33.45],
-                                "arrival": 1800,
-                                "duration": 1200,
-                                "distance": 4000,
-                                "load": [0, 0, 0],
-                            },
-                        ],
-                    }
-                ],
-                "unassigned": [],
-            },
-        )
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json=response_payload())
 
-    respx.post(url__regex=r"http://vroom:3000/.*").mock(side_effect=responder)
-
+    respx.post("http://vroom:3000").mock(side_effect=responder)
     result = VroomAdapter("http://vroom:3000").solve(problem())
-
     assert captured["jobs"][0]["delivery"] == [2, 2000, 4000]  # type: ignore[index]
     assert captured["jobs"][0]["time_windows"] == [[3600, 14400]]  # type: ignore[index]
+    assert captured["jobs"][0]["priority"] == 80  # type: ignore[index]
     assert captured["vehicles"][0]["end"] == [-70.66, -33.45]  # type: ignore[index]
+    assert captured["vehicles"][0]["costs"] == {  # type: ignore[index]
+        "fixed": 1000,
+        "per_hour": 500,
+        "per_km": 100,
+    }
     assert result.summary.assigned_task_count == 1
     assert result.summary.distance_meters == 4000
     assert result.routes[0].steps[1].order_id == "ORD-1"
+    assert result.routes[0].steps[1].time_window_status == "EARLY_WAIT"
+    assert result.routes[0].totals.total_duration_seconds == 1900

@@ -35,6 +35,12 @@ class Certainty(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class VehicleCost:
+    """Scaled input rates, not an estimate of the total business operating cost.
+
+    `per_duty_hour_units` is the historical name. The existing VROOM mapping
+    uses it for driving only; operating-cost-v1 separately prices whole duty.
+    """
+
     currency: str
     scale: int
     fixed_units: int
@@ -69,6 +75,9 @@ class OptimizationVehicle:
     capacity: Capacity
     skills: frozenset[str]
     costs: VehicleCost
+    max_route_distance_meters: int | None = None
+    max_driving_seconds: int | None = None
+    max_delivery_tasks: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

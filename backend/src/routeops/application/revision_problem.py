@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from math import asin, cos, radians, sin, sqrt
 from uuid import UUID, uuid5
 from zoneinfo import ZoneInfo
 
@@ -13,17 +12,17 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from routeops.application.import_context import local_instant
+from routeops.application.optimization_reconciliation import reconcile_result as reconcile_result
 from routeops.domain.models import Capacity, Coordinate, DistributionCenter, Order, OrderLine
 from routeops.domain.optimization import (
     DeliveryTask,
     OptimizationOptions,
     OptimizationProblem,
-    OptimizationResult,
     OptimizationVehicle,
     SolutionQuality,
-    StepKind,
     VehicleCost,
 )
+from routeops.domain.optimization.validation import instant
 from routeops.infrastructure.persistence.models import (
     DistributionCenterModel,
     ImportValidationContextModel,
@@ -34,7 +33,6 @@ from routeops.infrastructure.persistence.models import (
     ScenarioRevisionModel,
     VehicleModel,
 )
-from routeops.infrastructure.solver.errors import SolverResponseError
 
 
 class RunInputError(Exception):
@@ -154,7 +152,14 @@ class PreparedRevision:
             for order_id, center_id in sorted(assigned_centers.items())
         )
         return OptimizationProblem(
-            contract_version="1.0",
+            contract_version=(
+                "1.1" if any(
+                    vehicle.max_route_distance_meters is not None
+                    or vehicle.max_driving_seconds is not None
+                    or vehicle.max_delivery_tasks is not None
+                    for vehicle in self.vehicles
+                ) else "1.0"
+            ),
             problem_id=run_id,
             scenario_id=self.scenario_id,
             horizon_start=self.horizon_start,
@@ -284,6 +289,9 @@ def load_prepared_revision(session: Session, revision_id: UUID) -> PreparedRevis
                     per_duty_hour_units=_scaled(vehicle_row.cost_per_hour, 10_000),
                     per_km_units=_scaled(vehicle_row.cost_per_km, 10_000),
                 ),
+                max_route_distance_meters=vehicle_row.max_route_distance_meters,
+                max_driving_seconds=vehicle_row.max_driving_seconds,
+                max_delivery_tasks=vehicle_row.max_delivery_tasks,
             )
         )
     if not centers or not orders or not vehicles:
@@ -303,6 +311,23 @@ def load_prepared_revision(session: Session, revision_id: UUID) -> PreparedRevis
             or order.time_window_start >= order.time_window_end
         ):
             raise RunInputError("ORDER_WINDOW_OUTSIDE_HORIZON")
+    try:
+        for value in (
+            revision.horizon_start_at,
+            revision.horizon_end_at,
+            *(
+                value
+                for order in orders
+                for value in (
+                    order.time_window_start,
+                    order.time_window_end,
+                )
+            ),
+            *(value for vehicle in vehicles for value in (vehicle.shift_start, vehicle.shift_end)),
+        ):
+            instant(value)
+    except ValueError as exc:
+        raise RunInputError("RUN_TIME_PRECISION_INVALID") from exc
     return PreparedRevision(
         revision_id=revision_id,
         scenario_id=revision.scenario_id,
@@ -320,111 +345,3 @@ def load_prepared_revision(session: Session, revision_id: UUID) -> PreparedRevis
         vehicles=tuple(vehicles),
         line_count=line_count,
     )
-
-
-def _distance_m(first: Coordinate, second: Coordinate) -> float:
-    latitude_delta = radians(second.latitude - first.latitude)
-    longitude_delta = radians(second.longitude - first.longitude)
-    arc = sin(latitude_delta / 2) ** 2 + (
-        cos(radians(first.latitude)) * cos(radians(second.latitude))
-        * sin(longitude_delta / 2) ** 2
-    )
-    return 12_742_000 * asin(min(1, sqrt(arc)))
-
-
-def reconcile_result(
-    problem: OptimizationProblem, result: OptimizationResult,
-    max_geometry_gap_m: float = 250,
-) -> None:
-    if (
-        result.problem_id != problem.problem_id
-        or result.contract_version != problem.contract_version
-    ):
-        raise SolverResponseError("Solver result does not match the submitted problem")
-    tasks = {task.task_id: task for task in problem.tasks}
-    vehicles = {vehicle.vehicle_id: vehicle for vehicle in problem.vehicles}
-    seen: set[UUID] = set()
-    used_vehicles: set[UUID] = set()
-    delivered = 0
-    for route in result.routes:
-        vehicle = vehicles.get(route.vehicle_id)
-        if vehicle is None or vehicle.vehicle_id in used_vehicles:
-            raise SolverResponseError("Solver returned an unknown or duplicate vehicle")
-        used_vehicles.add(vehicle.vehicle_id)
-        if (
-            route.distribution_center_id != vehicle.distribution_center_id
-            or route.source_vehicle_id != vehicle.source_vehicle_id
-            or len(route.steps) < 2
-            or route.steps[0].kind != StepKind.START
-            or route.steps[-1].kind != StepKind.END
-        ):
-            raise SolverResponseError("Solver route does not match its vehicle or center")
-        if (
-            route.steps[0].arrival_at < vehicle.shift_start
-            or route.steps[-1].departure_at > vehicle.shift_end
-        ):
-            raise SolverResponseError("Solver route falls outside the vehicle shift")
-        if len(route.geometry) < 2 or any(
-            min(_distance_m(step.location, point) for point in route.geometry)
-            > max_geometry_gap_m
-            for step in route.steps
-        ):
-            raise SolverResponseError("Solver geometry does not cover its stops")
-        if (
-            _distance_m(route.geometry[0], route.steps[0].location) > max_geometry_gap_m
-            or _distance_m(route.geometry[-1], route.steps[-1].location)
-            > max_geometry_gap_m
-        ):
-            raise SolverResponseError("Solver geometry endpoints do not match route stops")
-        for actual, expected in (
-            (route.steps[0].location, vehicle.start),
-            (route.steps[-1].location, vehicle.end),
-        ):
-            if (
-                abs(actual.latitude - expected.latitude) > 0.00001
-                or abs(actual.longitude - expected.longitude) > 0.00001
-            ):
-                raise SolverResponseError("Solver route is not closed at its allocated center")
-        assigned = Capacity(0, 0, 0)
-        for step in route.steps:
-            if step.kind != StepKind.DELIVERY:
-                continue
-            if step.task_id is None:
-                raise SolverResponseError("Solver delivery step has no task")
-            task = tasks.get(step.task_id)
-            if task is None or task.task_id in seen or step.order_id != task.order_id:
-                raise SolverResponseError("Solver returned an unknown or duplicate order")
-            seen.add(task.task_id)
-            delivered += 1
-            if task.distribution_center_id != vehicle.distribution_center_id or not (
-                task.required_skills <= vehicle.skills
-            ):
-                raise SolverResponseError("Solver assigned an incompatible vehicle")
-            if _distance_m(step.location, task.location) > 2:
-                raise SolverResponseError("Solver delivery location differs from the order")
-            assigned = Capacity(
-                assigned.units + task.demand.units,
-                assigned.weight_grams + task.demand.weight_grams,
-                assigned.volume_cm3 + task.demand.volume_cm3,
-            )
-            if (
-                step.service_start_at < task.time_window_start
-                or step.service_start_at > task.time_window_end
-                or step.service_seconds != task.service_seconds
-            ):
-                raise SolverResponseError("Solver violated an order window or service time")
-        if not vehicle.capacity.fits(assigned):
-            raise SolverResponseError("Solver exceeded vehicle capacity")
-    for item in result.unassigned:
-        task = next((task for task in tasks.values() if task.order_id == item.order_id), None)
-        if task is None or task.task_id in seen or item.task_id != task.task_id:
-            raise SolverResponseError("Solver returned an unknown or duplicate unassigned order")
-        seen.add(task.task_id)
-    if seen != set(tasks):
-        raise SolverResponseError("Solver omitted a submitted order")
-    if (
-        result.summary.route_count != len(result.routes)
-        or result.summary.assigned_task_count != delivered
-        or result.summary.unassigned_task_count != len(result.unassigned)
-    ):
-        raise SolverResponseError("Solver result counts do not match its routes and exceptions")

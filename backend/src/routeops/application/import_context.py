@@ -10,8 +10,9 @@ from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-CONTRACT_VERSION = "2.1"
-VALIDATOR_VERSION = "2.3b.1"
+CONTRACT_VERSION = "2.2"
+VALIDATOR_VERSION = "3.1a.1"
+LEGACY_VERSIONS = ("2.1", "2.3b.1")
 type Point = tuple[Decimal, Decimal]
 type Ring = tuple[Point, ...]
 
@@ -56,7 +57,9 @@ class ValidationContext:
             or self.currency != self.currency.upper()
         ):
             raise ValueError("CONTEXT_CURRENCY_INVALID")
-        if self.contract_version != CONTRACT_VERSION or self.validator_version != VALIDATOR_VERSION:
+        if (self.contract_version, self.validator_version) not in (
+            (CONTRACT_VERSION, VALIDATOR_VERSION), LEGACY_VERSIONS
+        ):
             raise ValueError("CONTEXT_VERSION_INVALID")
         if self.operational_area is not None:
             _polygons(self.operational_area)

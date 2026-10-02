@@ -76,7 +76,7 @@ The [v0.2.1 correction](v0.2.1-routing-ui.md) was formally accepted by the user,
 including its visual review, on 2026-10-01. It closes the road-network snapping
 and visual workflow findings with the automated results and browser evidence
 summarized in that guide. The `v0.2.0` acceptance record remains historical;
-Milestone 3 implementation awaits a separate instruction.
+Milestone 3 begins with the separately authorized 3.1a below.
 
 Approved delivery sequence (2026-09-28):
 
@@ -128,10 +128,10 @@ Assignment demos and phase boundaries:
   origin decision remains in 2.4. VROOM remains reachable only through
   `SolverGateway`.
 
-See [the 2.1 contract](milestone-2-1-import-validation.md). Processing runs
-stale for more than a configurable 30 minutes will be recovered idempotently
-in a later delivery; ready-for-review runs and committed reservations do not
-expire automatically. No such recovery is part of 2.1.
+See [the 2.1 contract](milestone-2-1-import-validation.md). Validation and
+planning now recover through PostgreSQL leases and fenced owner tokens, not
+a speculative 30-minute timer. READY runs and confirmed reservations do not
+expire automatically. The accepted 2.3b/2.5 guides describe their lifecycles.
 
 Deliverables:
 
@@ -155,6 +155,26 @@ Acceptance criteria:
   evaluated replacement remains deterministic and auditable.
 
 ## Milestone 3 — operation and analytics
+
+Status: **3.1a accepted on 2026-10-02; 3.1b authorized next**, based on published
+`v0.2.1` (`0241a5168d9f7c02a152cf3614bf502659ea33b3`). One branch,
+`feat/m3-1-operation-analytics`, serves the three parts of 3.1.
+
+Approved sequence:
+
+1. **3.1a:** executable v1 contracts, traceable restriction matrix, exact
+   business-cost foundation, optional vehicle distance/driving/task limits,
+   versioned import compatibility and current documentation. Allocation policies
+   are unchanged.
+2. **3.1b:** complete indicator catalog, calculation and queries.
+3. **3.1c:** layered diagnoses with evidence and independent B2B/B2C cases.
+4. **3.2:** manual plan and comparison of strategies.
+5. **3.3:** interface, exports and integrated acceptance.
+
+See [the 3.1a report](milestone-3-1a-contracts-costs.md). 3.1c remains pending.
+`v0.3.0` is reserved for acceptance of the whole milestone. Existing import and
+solver limits and the OSRM extract remain unchanged. B2B/B2C labels add no
+implicit constraints or integration services.
 
 Deliverables:
 
@@ -203,7 +223,7 @@ Acceptance criteria:
   profiles require measured justification.
 - The deployment is trusted, local, and single-user, but uploaded files are
   still treated as untrusted input.
-- Planning workload stays within a bounded synchronous solve; the limit will be
+- Planning workload stays within bounded leased jobs (original demo synchronous); the limit will be
   measured rather than guessed.
 
 ## Principal risks and mitigations
@@ -217,7 +237,7 @@ Acceptance criteria:
 | Misleading unassigned causes | Evidence model and explicit `PROVEN`/`INFERRED` certainty |
 | VROOM/OSRM outage or malformed response | Bounded retries, timeouts, response reconciliation, distinct failure states |
 | Decimal-to-integer distortion | Exact decimal validation and documented integer scales |
-| Long synchronous requests | Workload cap and measurement; job runner only after demonstrated need |
+| Long synchronous requests | Workload cap and measurement; PostgreSQL workers and bounded workloads |
 | Spreadsheet attacks | No macros/formulas/external links; escape export cells beginning with formula sigils |
 
 ## Decisions approved before Milestone 1

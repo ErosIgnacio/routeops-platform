@@ -2,9 +2,9 @@
 
 Checked against upstream project sources on **2026-09-24**. The statements
 below are documentation-level compatibility findings; runtime compatibility is
-an explicit Milestone 1 smoke test and has not yet been claimed.
+recorded in the Milestone 1 runtime report and subsequent 2.6/v0.2.1 evidence.
 
-## Recommended pins
+## Adopted pins (assessment dated 2026-09-24)
 
 | Component | Current stable/upstream version | Proposed image pin |
 |---|---:|---|
@@ -56,7 +56,7 @@ publishes a moving `latest` independently from its stable tag.
    `osrm-routed --max-table-size` and `--max-viaroute-size`. The values will be
    intentionally bounded from the application workload, not set to unlimited.
 
-## Remaining verification for Milestone 1
+## Historical Milestone 1 verification checklist (completed)
 
 - Pull both exact manifests on the target architecture.
 - Build a small synthetic Santiago OSRM MLD dataset using the pinned image.
@@ -70,4 +70,12 @@ publishes a moving `latest` independently from its stable tag.
 
 The approved bounded extract was downloaded on 2026-09-24. Its 4,145,215-byte
 source and SHA-256 are recorded in `data/osrm/source-lock.json`; OSRM processing
-and cross-service verification still require Docker.
+and cross-service verification were completed with Docker; see the historical
+acceptance reports.
+
+## 3.1a semantics audit
+
+The version pins and map extract are unchanged. Cost and route-limit capabilities
+were checked against the **tagged** upstream API and source, not a moving wiki.
+See [the 3.1a matrix, cost distinction and proposed limits](../milestone-3-1a-contracts-costs.md).
+Historical “latest” findings above refer to their assessment date, not today.

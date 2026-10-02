@@ -198,7 +198,14 @@ class RevisionRunService:
                     "snapshot_id": str(prepared.snapshot_id),
                     "solution_quality": quality.value,
                     "allocation_policy": policy_version,
-                    "contract_version": "1.0",
+                    "contract_version": (
+                        "1.1" if any(
+                            vehicle.max_route_distance_meters is not None
+                            or vehicle.max_driving_seconds is not None
+                            or vehicle.max_delivery_tasks is not None
+                            for vehicle in prepared.vehicles
+                        ) else "1.0"
+                    ),
                 }
                 request_sha256 = hashlib.sha256(
                     json.dumps(request_data, sort_keys=True, separators=(",", ":")).encode()

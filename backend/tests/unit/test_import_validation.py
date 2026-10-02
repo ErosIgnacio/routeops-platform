@@ -4,13 +4,15 @@ import csv
 import io
 import zipfile
 from collections.abc import Mapping
+from datetime import date, datetime
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import pytest
 
 from routeops.application.import_cli import main
-from routeops.application.import_contract import DATASETS, SCHEMA
+from routeops.application.import_context import ValidationContext
+from routeops.application.import_contract import DATASETS, LEGACY_SCHEMA, SCHEMA
 from routeops.application.import_templates import csv_template, xlsx_template
 from routeops.application.import_validation import ImportLimits, validate_package
 
@@ -61,7 +63,8 @@ EXPECTED_HEADERS = {
     "vehicles": (
         "vehicle_id,distribution_center_id,vehicle_type,capacity_units,"
         "capacity_weight_kg,capacity_volume_m3,shift_start,shift_end,skills,"
-        "fixed_cost,cost_per_hour,cost_per_km"
+        "fixed_cost,cost_per_hour,cost_per_km,max_route_distance_meters,"
+        "max_driving_seconds,max_delivery_tasks"
     ),
 }
 
@@ -75,7 +78,9 @@ def csv_data(
         stream = io.StringIO(newline="")
         writer = csv.writer(stream)
         writer.writerow([spec.name for spec in SCHEMA[name]])
-        writer.writerows(rows[name])
+        writer.writerows(
+            values + [""] * (len(SCHEMA[name]) - len(values)) for values in rows[name]
+        )
         result[f"{name}.csv"] = stream.getvalue().encode("utf-8-sig" if bom else "utf-8")
     return result
 
@@ -107,12 +112,86 @@ def xlsx_with_rows() -> bytes:
                 sheet_data = root.find(f"{ns}sheetData")
                 assert sheet_data is not None
                 row = ET.SubElement(sheet_data, f"{ns}row", r="2")
-                for index, value in enumerate(ROWS[name], start=1):
+                padded = ROWS[name] + [""] * (len(SCHEMA[name]) - len(ROWS[name]))
+                for index, value in enumerate(padded, start=1):
                     cell = ET.SubElement(row, f"{ns}c", r=f"{chr(64 + index)}2", t="inlineStr")
                     ET.SubElement(ET.SubElement(cell, f"{ns}is"), f"{ns}t").text = value
                 content = ET.tostring(root)
             new.writestr(item.filename, content)
     return output.getvalue()
+
+
+@pytest.mark.parametrize("value,code", [
+    ("1", None),
+    ("2147483647", None),
+    ("0", "QUANTITY_RANGE"),
+    ("2147483648", "QUANTITY_RANGE"),
+    ("-1", "INTEGER_INVALID"),
+    ("1.5", "INTEGER_INVALID"),
+])
+def test_optional_vehicle_limits_validate_exact_bounds(value: str, code: str | None) -> None:
+    rows = {name: [list(values)] for name, values in ROWS.items()}
+    rows["vehicles"][0].extend([value, value, value])
+    report = validate_package(csv_data(rows))
+    observed = {issue.code for issue in report.issues if issue.dataset == "vehicles"}
+    assert (code in observed) if code else report.valid
+
+
+def test_legacy_vehicle_headers_keep_old_normalized_rows() -> None:
+    files = csv_data()
+    stream = io.StringIO(newline="")
+    writer = csv.writer(stream)
+    writer.writerow(spec.name for spec in LEGACY_SCHEMA["vehicles"])
+    writer.writerow(ROWS["vehicles"])
+    files["vehicles.csv"] = stream.getvalue().encode()
+    context = ValidationContext(
+        planning_date=date(2026, 10, 15),
+        horizon_start_at=datetime.fromisoformat("2026-10-15T08:00:00-03:00"),
+        horizon_end_at=datetime.fromisoformat("2026-10-15T18:00:00-03:00"),
+        timezone_iana="America/Santiago",
+        currency="CLP",
+        contract_version="2.1",
+        validator_version="2.3b.1",
+    )
+    normalized: list[dict[str, object]] = []
+    report = validate_package(
+        files, context=context,
+        row_sink=lambda name, _source, _row, values: normalized.append(values)
+        if name == "vehicles" else None,
+    )
+    assert report.valid and report.contract_version == "2.1"
+    assert len(normalized) == 1
+    assert not any(key.startswith("max_") for key in normalized[0])
+    assert validate_package(files, context=context).to_dict() == report.to_dict()
+
+
+def test_old_xlsx_vehicle_sheet_remains_compatible() -> None:
+    source = io.BytesIO(xlsx_with_rows())
+    target = io.BytesIO()
+    ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    with zipfile.ZipFile(source) as old, zipfile.ZipFile(target, "w") as new:
+        for entry in old.infolist():
+            content = old.read(entry)
+            if entry.filename == "xl/worksheets/sheet5.xml":
+                root = ET.fromstring(content)
+                sheet = root.find(f"{ns}sheetData")
+                assert sheet is not None
+                for row in sheet.findall(f"{ns}row"):
+                    for cell in list(row):
+                        if cell.get("r", "")[:1] in {"M", "N", "O"}:
+                            row.remove(cell)
+                content = ET.tostring(root)
+            new.writestr(entry, content)
+    files = {"legacy.xlsx": target.getvalue()}
+    assert validate_package(files).valid
+    legacy = ValidationContext(
+        planning_date=date(2026, 10, 15),
+        horizon_start_at=datetime.fromisoformat("2026-10-15T08:00:00-03:00"),
+        horizon_end_at=datetime.fromisoformat("2026-10-15T18:00:00-03:00"),
+        timezone_iana="America/Santiago", currency="CLP",
+        contract_version="2.1", validator_version="2.3b.1",
+    )
+    assert validate_package(files, context=legacy).valid
 
 
 def test_templates_are_deterministic_and_round_trip() -> None:

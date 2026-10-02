@@ -16,12 +16,13 @@ from typing import IO, Any, Literal
 from zoneinfo import ZoneInfo
 
 from routeops.application.import_context import (
+    CONTRACT_VERSION,
     ValidationContext,
     local_instant,
     prepare_area,
     prepared_area_covers,
 )
-from routeops.application.import_contract import DATASETS, SCHEMA, Field
+from routeops.application.import_contract import DATASETS, LEGACY_SCHEMA, SCHEMA, Field
 
 Severity = Literal["ERROR", "WARNING"]
 _ID = re.compile(r"[A-Za-z0-9._-]{1,100}\Z")
@@ -94,7 +95,7 @@ class DatasetCount:
 
 @dataclass(slots=True)
 class ValidationReport:
-    contract_version: str = "2.1"
+    contract_version: str = CONTRACT_VERSION
     issues: list[Issue] = field(default_factory=list)
     counts: dict[str, DatasetCount] = field(
         default_factory=lambda: {name: DatasetCount() for name in DATASETS}
@@ -128,13 +129,16 @@ class _Collector:
     ) -> None:
         self.limits = limits
         self.context = context
+        self.schema = LEGACY_SCHEMA if context and context.contract_version == "2.1" else SCHEMA
         self.row_sink = row_sink
         self.area = (
             prepare_area(context.operational_area)
             if context is not None and context.operational_area is not None
             else None
         )
-        self.report = ValidationReport()
+        self.report = ValidationReport(
+            contract_version=context.contract_version if context else CONTRACT_VERSION
+        )
         self._truncated = False
         self.rows: dict[str, list[tuple[int, dict[str, Any]]]] = {name: [] for name in DATASETS}
         self.keys: dict[str, set[tuple[str, ...]]] = {name: set() for name in DATASETS}
@@ -179,20 +183,20 @@ class _Collector:
         if header_row != 1:
             self.add("HEADER_MISSING", "ERROR", name, source, 1)
             return
-        expected = {item.name for item in SCHEMA[name]}
+        expected = {item.name for item in self.schema[name]}
         if len(headers) > self.limits.max_columns:
             self.add("COLUMN_LIMIT", "ERROR", name, source, 1)
             return
         if len(set(headers)) != len(headers):
             self.add("HEADER_DUPLICATE", "ERROR", name, source, 1)
-        for item in SCHEMA[name]:
+        for item in self.schema[name]:
             if item.required and item.name not in headers:
                 self.add("HEADER_MISSING", "ERROR", name, source, 1, item.name)
         for column_number, header in enumerate(headers, start=1):
             if header not in expected:
                 self.add("HEADER_UNKNOWN", "WARNING", name, source, 1, f"column {column_number}")
         if len(set(headers)) != len(headers) or any(
-            item.required and item.name not in headers for item in SCHEMA[name]
+            item.required and item.name not in headers for item in self.schema[name]
         ):
             for row_number, _ in rows:
                 self.report.counts[name].total += 1
@@ -212,7 +216,7 @@ class _Collector:
                 continue
             raw = dict(zip(headers, cells, strict=True))
             parsed: dict[str, Any] = {}
-            for spec in SCHEMA[name]:
+            for spec in self.schema[name]:
                 value = raw.get(spec.name, "").strip()
                 if not value:
                     if spec.required:

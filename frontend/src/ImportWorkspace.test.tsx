@@ -77,6 +77,23 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("import workflow", () => {
+  it("requests the pinned legacy validator for an unvalidated 2.1 batch", async () => {
+    const legacy = { ...batch, status: "RECEIVED" as const, parser_version: "2.1" };
+    localStorage.setItem("routeops.import-flow.v1", JSON.stringify({
+      scenarioId: "scenario-1", batchId: legacy.id, uploadKey: "legacy-key",
+    }));
+    api.getImport.mockResolvedValue(legacy);
+    api.getValidation.mockResolvedValue({ ...validation, status: "RECEIVED", report: null });
+    api.requestValidation.mockResolvedValue({ ...validation, status: "VALIDATING", report: null });
+    render(<ImportWorkspace />);
+    const button = await screen.findByRole("button", { name: "Solicitar validación" });
+    fireEvent.click(button);
+    await waitFor(() => expect(api.requestValidation).toHaveBeenCalled());
+    expect(api.requestValidation.mock.calls[0][2]).toMatchObject({
+      contract_version: "2.1", validator_version: "2.3b.1",
+    });
+  });
+
   it("requires exactly the accepted file package", () => {
     const csv = ["orders", "order_lines", "inventory", "distribution_centers", "vehicles"]
       .map((name) => new File(["header"], `${name}.csv`));

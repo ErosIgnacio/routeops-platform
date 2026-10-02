@@ -435,6 +435,9 @@ class ImportPublicationService:
                     "fixed_cost": value["fixed_cost"],
                     "cost_per_hour": value["cost_per_hour"],
                     "cost_per_km": value["cost_per_km"],
+                    "max_route_distance_meters": value.get("max_route_distance_meters"),
+                    "max_driving_seconds": value.get("max_driving_seconds"),
+                    "max_delivery_tasks": value.get("max_delivery_tasks"),
                 }
 
         def inventory_rows() -> Iterator[dict[str, Any]]:

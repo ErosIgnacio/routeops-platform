@@ -1,4 +1,4 @@
-"""Deterministic, header-only CSV and XLSX templates for contract 2.1."""
+"""Deterministic, header-only CSV and XLSX templates for current imports."""
 
 from __future__ import annotations
 

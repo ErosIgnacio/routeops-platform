@@ -5,23 +5,26 @@ optimization boundary: stock-aware distribution-center allocation, VROOM route
 optimization, OSRM road costs, PostGIS persistence, and a React/MapLibre control
 center. All business data in this repository is synthetic.
 
-> Status: **Milestone 1 and deliveries 2.1–2.3c accepted. Delivery 2.3d is
-> available locally for final review on `feat/m2-3-import-flow`.**
+> Status: **Milestones 1 and 2 accepted and published; routing/UI corrections
+> accepted as `v0.2.1`. Delivery 3.1a is accepted; 3.1b follows on
+> `feat/m3-1-operation-analytics`.**
 >
-> Docker Desktop/WSL2
-> validation passed on 2026-09-24, including MLD map processing, online
-> migrations, real VROOM/OSRM optimization, persistence across a full stack
-> restart, smoke tests, and integration tests.
+> Local Docker Desktop/WSL2 runtime, durable import/planning workers, transactional
+> inventory reservations, real OSRM/VROOM and browser workflows are verified in
+> the historical [2.6 acceptance](docs/milestone-2-6-acceptance.md) and
+> [v0.2.1 correction report](docs/v0.2.1-routing-ui.md).
 
-## What the vertical slice does
+## Original demonstration and current workspaces
 
 1. Loads a deterministic synthetic Santiago scenario with two distribution
    centers, inventory, three vehicles, and five fictional orders.
 2. Allocates each complete order to one stock-eligible center using a documented
    greedy policy: priority, window end, OSRM duration, inventory slack, center ID.
+   Imported revisions use `alternatives-v2` by default; `greedy-v1` remains an
+   explicit comparison policy. Neither claims global optimality.
 3. Sends only the allocated, solver-neutral problem through `SolverGateway` to
    the VROOM adapter. Center isolation, three-dimensional capacity, time windows,
-   skills, costs, and closed routes are mapped explicitly.
+   skills, costs, optional vehicle route limits and closed routes are mapped explicitly.
 4. Reconciles every returned job and vehicle, decodes route geometry, persists
    the run and PostGIS line strings, and exposes KPIs and explained exceptions.
 5. Renders the latest run in a responsive React dashboard with a MapLibre map.
@@ -30,6 +33,15 @@ One fixture order, `ORD-003`, deliberately lacks full stock coverage, so a
 successful demo should be `PARTIAL`: routable orders plus one proven allocation
 exception. The current map colors are blue `#3338d6` for `VEH-CENTRO-01` and
 red `#eb1010` for `VEH-ORIENTE-01`.
+
+The accepted `/imports` workspace supports provisional CSV/XLSX upload,
+recoverable contextual validation and atomic revision publication. `/planning`
+executes immutable revisions with isolated demos, auditable center choices,
+stock reservations, acceptance/cancellation and recoverable history.
+
+B2B and B2C share the same explicit contracts. Labels do not activate implicit
+rules. Synthetic independent cases are planned for 3.1c. See the
+[3.1a contract matrix and cost foundation](docs/milestone-3-1a-contracts-costs.md).
 
 ## Quick start
 
@@ -58,6 +70,7 @@ run the download command and review any checksum change before preprocessing.
 Once the stack is healthy:
 
 - dashboard: <http://localhost:5173>
+- planning workspace: <http://127.0.0.1:5173/planning>
 - import workspace: <http://127.0.0.1:5173/imports>
 - OpenAPI: <http://localhost:8000/docs>
 - liveness: <http://localhost:8000/health/live>
@@ -96,6 +109,7 @@ The import workspace, its recovery flow and performance measurements are in
 | `POST` | `/api/v1/demo/runs` | Allocate, optimize, persist, and return a demo run |
 | `GET` | `/api/v1/runs/latest` | Return the newest persisted run |
 | `GET` | `/api/v1/runs/{run_id}` | Return one persisted run |
+| `GET` | `/api/v1/runs/{run_id}/estimated-operating-cost` | Versioned decimal business cost from persisted facts (accepted 3.1a) |
 | `GET` | `/health/live` | Process liveness only |
 | `GET` | `/health/ready` | Aggregate database/VROOM/OSRM readiness |
 | `GET` | `/health/dependencies` | Per-dependency diagnostic status |
@@ -148,8 +162,9 @@ SolverGateway / VroomAdapter ---- VROOM ---- OSRM
              allocation travel times ---------^
 ```
 
-The backend follows a modular-monolith/hexagonal boundary. Domain and
-application modules never import VROOM JSON or SQLAlchemy models. Full design:
+The backend follows a modular-monolith/hexagonal boundary. Domain models do not import VROOM JSON or SQLAlchemy models. Solver calls use
+neutral DTOs. The current revision-preparation application module reads ORM
+models directly; this existing boundary limitation is documented in the design:
 
 - [Product requirements](docs/product-requirements.md)
 - [Architecture](docs/architecture.md)

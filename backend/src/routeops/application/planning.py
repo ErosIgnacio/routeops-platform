@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
+from routeops.application.optimization_reconciliation import reconcile_result
 from routeops.application.ports.gateways import RunRepository, SolverGateway
 from routeops.application.serialization import to_primitive
 from routeops.domain.models import ScenarioData
@@ -58,12 +59,22 @@ class DemoPlanningService:
                 "solution_quality": quality.value,
                 "allocation_policy": DeterministicAllocationPolicy.version,
                 "map_dataset_sha256": self._map_dataset_sha256,
+                "operating_cost_rates": {
+                    "currency": scenario.currency,
+                    "vehicles": {
+                        vehicle.id: {"fixed": str(vehicle.fixed_cost),
+                                     "per_duty_hour": str(vehicle.cost_per_hour),
+                                     "per_km": str(vehicle.cost_per_km)}
+                        for vehicle in scenario.vehicles
+                    },
+                },
             },
         )
         try:
             allocation = self._allocation.allocate(scenario)
             problem = self._build_problem(run_id, scenario, allocation.allocated, quality)
             solver_result = self._solver.solve(problem)
+            reconcile_result(problem, solver_result)
             result = self._merge_unassigned(solver_result, allocation.unassigned)
             completed_at = datetime.now(UTC)
             kpis = self._kpis(result)

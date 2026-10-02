@@ -1,6 +1,6 @@
 # ADR-0001: Encapsulate VROOM and use OSRM as the routing service
 
-- Status: Proposed
+- Status: Accepted (implemented and verified in Milestones 1–2)
 - Date: 2026-09-24
 
 ## Context
@@ -51,6 +51,17 @@ with OSRM as a separate routing service.
   separate evidence-based explanation component.
 - Map data changes can alter results even with identical application and solver
   versions; the extract checksum is part of run provenance.
+
+## Later implementation decisions
+
+Milestone 2 introduced durable PostgreSQL job leases (no additional queue),
+private `ObjectStorageGateway`, scenario-wide operating inventory and per-order
+reservations. Allocation's CD–order duration matrix and snapping evidence are
+persisted in decision snapshots; VROOM still builds its own routing matrices.
+3.1a audits response facts and adds a separate decimal cost derivation. Raw
+vendor JSON retention and an optional matrix field were initial design ideas;
+the current DTO has neither. Normalized results, decision evidence, versions
+and source hashes are the current audit facts. Baseline evaluation is 3.2.
 
 ## Alternatives rejected for v1
 
