@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from math import asin, cos, radians, sin, sqrt
 from uuid import UUID, uuid5
 from zoneinfo import ZoneInfo
 
@@ -321,7 +322,20 @@ def load_prepared_revision(session: Session, revision_id: UUID) -> PreparedRevis
     )
 
 
-def reconcile_result(problem: OptimizationProblem, result: OptimizationResult) -> None:
+def _distance_m(first: Coordinate, second: Coordinate) -> float:
+    latitude_delta = radians(second.latitude - first.latitude)
+    longitude_delta = radians(second.longitude - first.longitude)
+    arc = sin(latitude_delta / 2) ** 2 + (
+        cos(radians(first.latitude)) * cos(radians(second.latitude))
+        * sin(longitude_delta / 2) ** 2
+    )
+    return 12_742_000 * asin(min(1, sqrt(arc)))
+
+
+def reconcile_result(
+    problem: OptimizationProblem, result: OptimizationResult,
+    max_geometry_gap_m: float = 250,
+) -> None:
     if (
         result.problem_id != problem.problem_id
         or result.contract_version != problem.contract_version
@@ -350,6 +364,18 @@ def reconcile_result(problem: OptimizationProblem, result: OptimizationResult) -
             or route.steps[-1].departure_at > vehicle.shift_end
         ):
             raise SolverResponseError("Solver route falls outside the vehicle shift")
+        if len(route.geometry) < 2 or any(
+            min(_distance_m(step.location, point) for point in route.geometry)
+            > max_geometry_gap_m
+            for step in route.steps
+        ):
+            raise SolverResponseError("Solver geometry does not cover its stops")
+        if (
+            _distance_m(route.geometry[0], route.steps[0].location) > max_geometry_gap_m
+            or _distance_m(route.geometry[-1], route.steps[-1].location)
+            > max_geometry_gap_m
+        ):
+            raise SolverResponseError("Solver geometry endpoints do not match route stops")
         for actual, expected in (
             (route.steps[0].location, vehicle.start),
             (route.steps[-1].location, vehicle.end),
@@ -374,6 +400,8 @@ def reconcile_result(problem: OptimizationProblem, result: OptimizationResult) -
                 task.required_skills <= vehicle.skills
             ):
                 raise SolverResponseError("Solver assigned an incompatible vehicle")
+            if _distance_m(step.location, task.location) > 2:
+                raise SolverResponseError("Solver delivery location differs from the order")
             assigned = Capacity(
                 assigned.units + task.demand.units,
                 assigned.weight_grams + task.demand.weight_grams,

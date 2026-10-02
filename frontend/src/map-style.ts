@@ -60,7 +60,7 @@ export const stopCasingLayer: CircleLayerSpecification = {
   type: "circle",
   source: "stops",
   paint: {
-    "circle-radius": ["case", ["==", ["get", "kind"], "DELIVERY"], 11, 14],
+    "circle-radius": ["case", ["==", ["get", "kind"], "DELIVERY"], 10, 16],
     "circle-color": "#ffffff",
     "circle-opacity": [
       "case",
@@ -76,8 +76,8 @@ export const stopMarkerLayer: CircleLayerSpecification = {
   type: "circle",
   source: "stops",
   paint: {
-    "circle-radius": ["case", ["==", ["get", "kind"], "DELIVERY"], 7, 10],
-    "circle-color": ["get", "color"],
+    "circle-radius": ["case", ["==", ["get", "kind"], "DELIVERY"], 7, 12],
+    "circle-color": ["case", ["==", ["get", "kind"], "DELIVERY"], ["get", "color"], "#10283d"],
     "circle-opacity": [
       "case",
       ["get", "selectionActive"],
@@ -85,7 +85,7 @@ export const stopMarkerLayer: CircleLayerSpecification = {
       1,
     ],
     "circle-stroke-color": "#ffffff",
-    "circle-stroke-width": 2,
+    "circle-stroke-width": ["case", ["==", ["get", "kind"], "DELIVERY"], 2, 4],
   },
 };
 

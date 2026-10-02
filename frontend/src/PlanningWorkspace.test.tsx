@@ -97,4 +97,15 @@ describe("published revision planning", () => {
     fireEvent.click(screen.getByText("Actualizar"));
     expect(await screen.findByText(/run-1 · READY/)).toBeTruthy();
   });
+
+  it("describes a finished run with no routes without claiming held reservations", async () => {
+    api.getRun.mockResolvedValue({
+      ...queued, status: "READY", result: { routes: [], unassigned: [{ order_id: "ORD-X", stage: "ALLOCATION", reasons: [{ code: "NO_COMPATIBLE_VEHICLE", certainty: "PROVEN" }] }] },
+    });
+    localStorage.setItem("routeops.planning.v1", JSON.stringify({ scenarioId: "scenario-1", revisionNo: 1, key: "key", runId: "run-1" }));
+    render(<PlanningWorkspace />);
+    expect(await screen.findByText(/El procesamiento terminó sin rutas/)).toBeTruthy();
+    expect(screen.queryByText(/Las rutas están listas para revisión/)).toBeNull();
+    expect(screen.getByText(/No hay vehículo compatible/)).toBeTruthy();
+  });
 });

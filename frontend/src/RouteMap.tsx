@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { updateMapResult } from "./map-controller";
+import { fitMapResult, updateMapResult } from "./map-controller";
 import { routeColorForVehicle } from "./map-data";
 import { createRouteMapStyle } from "./map-style";
 import type { PlanningRun } from "./types";
@@ -13,7 +13,20 @@ const readinessEvents = ["style.load", "load", "styledata", "sourcedata", "idle"
 type RouteMapProps = {
   run: PlanningRun | null;
   selectedVehicleId: string | null;
+  onShowAll?: () => void;
 };
+
+export function mapViewKey(run: PlanningRun | null, selectedVehicleId: string | null): string {
+  return JSON.stringify([
+    run?.run_id ?? null,
+    selectedVehicleId,
+    run?.result?.routes.map((route) => [
+      route.source_vehicle_id,
+      route.geometry,
+      route.steps.map((step) => [step.kind, step.location, step.order_id]),
+    ]) ?? [],
+  ]);
+}
 
 type DebugState = {
   styleLoaded: boolean;
@@ -114,9 +127,10 @@ function readDebugState(
   };
 }
 
-export function RouteMap({ run, selectedVehicleId }: RouteMapProps) {
+export function RouteMap({ run, selectedVehicleId, onShowAll }: RouteMapProps) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const lastViewKeyRef = useRef<string | null>(null);
   const runRef = useRef(run);
   const selectedVehicleRef = useRef(selectedVehicleId);
   const lastErrorRef = useRef<string | null>(null);
@@ -142,6 +156,33 @@ export function RouteMap({ run, selectedVehicleId }: RouteMapProps) {
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => map.resize());
+    observer?.observe(container.current);
+
+    const onMapClick = (event: maplibregl.MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(event.point, { layers: ["stops"] });
+      if (!features.length) return;
+      const content = document.createElement("div");
+      content.className = "stop-popup";
+      const title = document.createElement("strong");
+      title.textContent = "Paradas en este punto";
+      content.append(title);
+      const seen = new Set<string>();
+      for (const feature of features) {
+        const props = feature.properties;
+        const label = `${props.kind === "DELIVERY" ? "Entrega" : "CD"} · ${props.order} · ${props.vehicle} · #${props.sequence}`;
+        if (seen.has(label)) continue;
+        seen.add(label);
+        const line = document.createElement("div");
+        line.textContent = label;
+        content.append(line);
+      }
+      new maplibregl.Popup({ closeButton: true })
+        .setLngLat(event.lngLat)
+        .setDOMContent(content)
+        .addTo(map);
+    };
+    map.on("click", onMapClick);
 
     const refreshDebugState = () => {
       if (!debugEnabled) return;
@@ -179,6 +220,8 @@ export function RouteMap({ run, selectedVehicleId }: RouteMapProps) {
     map.on("error", onError);
 
     return () => {
+      observer?.disconnect();
+      map.off("click", onMapClick);
       map.off("load", onLoad);
       map.off("style.load", onStyleLoad);
       map.off("sourcedata", onSourceData);
@@ -194,12 +237,17 @@ export function RouteMap({ run, selectedVehicleId }: RouteMapProps) {
     if (!map) return;
 
     let applied = false;
+    const viewKey = mapViewKey(run, selectedVehicleId);
     const tryApply = () => {
       if (applied) return;
       syncRef.current.attempts += 1;
       try {
-        applied = updateMapResult(map, runRef.current, selectedVehicleRef.current);
+        applied = updateMapResult(
+          map, runRef.current, selectedVehicleRef.current,
+          lastViewKeyRef.current !== viewKey,
+        );
         if (applied) {
+          lastViewKeyRef.current = viewKey;
           syncRef.current.applied += 1;
           readinessEvents.forEach((eventName) => map.off(eventName, tryApply));
         }
@@ -218,6 +266,10 @@ export function RouteMap({ run, selectedVehicleId }: RouteMapProps) {
 
   return (
     <>
+      <div className="map-actions">
+        <button type="button" onClick={() => fitMapResult(mapRef.current!, runRef.current, selectedVehicleRef.current)} disabled={!run?.result?.routes.length}>Centrar rutas</button>
+        {onShowAll && <button type="button" onClick={onShowAll} disabled={!selectedVehicleId}>Mostrar todas</button>}
+      </div>
       <div className="route-map" ref={container} aria-label="Optimized route map" />
       {debugEnabled && (
         <aside className="map-debug" aria-label="MapLibre runtime diagnostics">

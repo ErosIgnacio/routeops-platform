@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import math
+from dataclasses import dataclass
+from typing import cast
+
 import httpx
 
 from routeops.domain.models import Coordinate
-from routeops.infrastructure.routing.errors import RoutingDependencyError
+from routeops.infrastructure.routing.errors import RoutingCoverageError, RoutingDependencyError
+
+
+@dataclass(frozen=True, slots=True)
+class AllocationMatrix:
+    durations: tuple[tuple[int, ...], ...]
+    snaps: list[dict[str, object]]
 
 
 class OsrmClient:
@@ -73,6 +83,87 @@ class OsrmClient:
                 raise ValueError("OSRM table contains an unreachable pair")
             return tuple(tuple(round(float(value)) for value in row) for row in rows)
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+            raise RoutingDependencyError("OSRM allocation matrix failed") from exc
+
+    def checked_duration_matrix(
+        self,
+        origins: tuple[Coordinate, ...],
+        destinations: tuple[Coordinate, ...],
+        max_snap_distance_m: float,
+    ) -> AllocationMatrix:
+        """Use the same OSRM table response for allocation times and directional snap evidence."""
+        if not origins or not destinations:
+            return AllocationMatrix(tuple(), [])
+        coordinates = origins + destinations
+        path = ";".join(f"{point.longitude},{point.latitude}" for point in coordinates)
+        try:
+            response = httpx.get(
+                f"{self._base_url}/table/v1/driving/{path}",
+                params={
+                    "sources": ";".join(str(index) for index in range(len(origins))),
+                    "destinations": ";".join(
+                        str(index) for index in range(len(origins), len(coordinates))
+                    ),
+                    "annotations": "duration",
+                },
+                timeout=self._timeout,
+            )
+            payload = response.json()
+            if payload.get("code") in ("NoSegment", "NoRoute"):
+                originals: list[dict[str, object]] = [
+                    {"role": role, "index": index,
+                     "original": [point.longitude, point.latitude],
+                     "snapped": None, "distance_m": None}
+                    for role, points in (("center", origins), ("order", destinations))
+                    for index, point in enumerate(points)
+                ]
+                code = (
+                    "ROUTING_POINT_UNCOVERED"
+                    if payload["code"] == "NoSegment"
+                    else "ROUTING_NO_PATH"
+                )
+                raise RoutingCoverageError(code, originals)
+            response.raise_for_status()
+            if payload.get("code") != "Ok":
+                raise ValueError("OSRM table did not return Ok")
+            rows = payload["durations"]
+            if len(rows) != len(origins) or any(len(row) != len(destinations) for row in rows):
+                raise ValueError("OSRM table dimensions do not match the request")
+            snaps: list[dict[str, object]] = []
+            for role, points, waypoints in (
+                ("center", origins, payload["sources"]),
+                ("order", destinations, payload["destinations"]),
+            ):
+                if len(points) != len(waypoints):
+                    raise ValueError("OSRM waypoint dimensions do not match the request")
+                for index, (point, waypoint) in enumerate(zip(points, waypoints, strict=True)):
+                    location = waypoint["location"]
+                    distance = float(waypoint["distance"])
+                    if (
+                        len(location) != 2
+                        or not all(math.isfinite(float(value)) for value in location)
+                        or not math.isfinite(distance)
+                        or distance < 0
+                    ):
+                        raise ValueError("OSRM returned an invalid waypoint")
+                    snaps.append(
+                        {
+                            "role": role,
+                            "index": index,
+                            "original": [point.longitude, point.latitude],
+                            "snapped": [float(location[0]), float(location[1])],
+                            "distance_m": round(distance, 3),
+                        }
+                    )
+            if any(cast(float, item["distance_m"]) > max_snap_distance_m for item in snaps):
+                raise RoutingCoverageError("ROUTING_SNAP_TOO_FAR", snaps)
+            if any(value is None for row in rows for value in row):
+                raise RoutingCoverageError("ROUTING_NO_PATH", snaps)
+            durations = tuple(tuple(round(float(value)) for value in row) for row in rows)
+            return AllocationMatrix(durations, snaps)
+        except RoutingCoverageError:
+            raise
+        except (httpx.HTTPError, KeyError, TypeError, ValueError, OverflowError) as exc:
             raise RoutingDependencyError("OSRM allocation matrix failed") from exc
 
     def health(self) -> dict[str, str]:

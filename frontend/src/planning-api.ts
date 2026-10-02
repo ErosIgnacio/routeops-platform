@@ -14,6 +14,8 @@ export type PlanningDecision = {
       discard_reason: string | null;
       missing_stock: Record<string, number>;
       compatible_vehicles: string[];
+      remaining_orders_with_alternative?: number | null;
+      rank?: Array<number | string> | null;
     }>;
   };
 };

@@ -126,6 +126,35 @@ describe("import workflow", () => {
     expect(screen.getByRole("button", { name: "Publicar revisión" }).hasAttribute("disabled")).toBe(false);
   });
 
+  it("synchronizes the selected recent batch without losing its selection", async () => {
+    localStorage.setItem("routeops.import-flow.v1", JSON.stringify({
+      scenarioId: "scenario-1", batchId: "batch-1", uploadKey: "key-1",
+    }));
+    api.listImports.mockResolvedValue({ items: [{ ...batch, status: "VALIDATING" }], next_offset: 20 });
+    render(<ImportWorkspace />);
+    expect(await screen.findByRole("button", { name: /VALID · batch-1/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Más lotes" })).toBeTruthy();
+    expect(screen.getByText(/Lote validado. Todavía no es una revisión publicada/)).toBeTruthy();
+  });
+
+  it("keeps the selected batch and loaded pages when its status changes", async () => {
+    localStorage.setItem("routeops.import-flow.v1", JSON.stringify({
+      scenarioId: "scenario-1", batchId: "batch-1", uploadKey: "key-1",
+    }));
+    const otherBatch = { ...batch, id: "batch-2", status: "RECEIVED" as const };
+    api.listImports.mockImplementation((_scenario: string, offset: number) => Promise.resolve(
+      offset === 20
+        ? { items: [otherBatch], next_offset: null }
+        : { items: [{ ...batch, status: "VALIDATING" }], next_offset: 20 },
+    ));
+    render(<ImportWorkspace />);
+    expect(await screen.findByText(/Lote validado. Todavía no es una revisión publicada/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Más lotes" }));
+    expect(await screen.findByRole("button", { name: /RECEIVED · batch-2/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /VALID · batch-1/ }).getAttribute("class")).toContain("MuiButton-contained");
+    expect(api.listImports).toHaveBeenCalledWith("scenario-1", 20);
+  });
+
   it("recovers a confirmed publication after the response is lost", async () => {
     localStorage.setItem("routeops.import-flow.v1", JSON.stringify({
       scenarioId: "scenario-1", batchId: "batch-1", uploadKey: "key-1",

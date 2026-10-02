@@ -77,6 +77,10 @@ export type PlanningRun = {
     solver_time_ms: number;
     estimated_cost: number;
     currency: string;
+    network_coverage?: {
+      max_snap_distance_m: number;
+      points: Array<{ role: string; business_id?: string; original: number[]; snapped: number[] | null; distance_m: number | null }>;
+    };
   } | null;
   error: string | null;
 };

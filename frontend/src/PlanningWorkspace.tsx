@@ -30,6 +30,7 @@ import {
 } from "./planning-api";
 import { RouteMap } from "./RouteMap";
 import { RouteSequence } from "./RouteSequence";
+import { routeColorForVehicle } from "./map-data";
 
 const STORAGE_KEY = "routeops.planning.v1";
 type Draft = { scenarioId: string; revisionNo: number; key: string; runId: string };
@@ -53,6 +54,9 @@ const problemNames: Record<string, string> = {
   NO_COMPATIBLE_VEHICLE: "No hay vehículo compatible en un CD con stock suficiente.",
   SOLVER_NO_FEASIBLE_ROUTE: "VROOM no incluyó el pedido en una ruta factible.",
   ROUTING_DEPENDENCY_FAILED: "OSRM no pudo completar la evaluación.",
+  ROUTING_POINT_UNCOVERED: "OSRM no encontró un segmento utilizable para un punto.",
+  ROUTING_SNAP_TOO_FAR: "Un punto está demasiado lejos de la red vial configurada. No se reservó stock.",
+  ROUTING_NO_PATH: "OSRM no encontró un trayecto entre un CD y un pedido. No se reservó stock.",
   SOLVER_DEPENDENCY_FAILED: "VROOM no pudo completar la optimización.",
   SOLVER_RESPONSE_INVALID: "VROOM devolvió una respuesta incompatible con la corrida.",
   SOLVER_INPUT_INVALID: "No se pudo preparar el problema para VROOM.",
@@ -272,24 +276,30 @@ export function PlanningWorkspace() {
               <Button onClick={() => refresh(run.run_id).catch((reason) => setError(describeError(reason)))}>Actualizar</Button>
             </Stack>
           </Stack>
-          {run.status === "READY" && <Alert severity="info" sx={{ mt: 1 }}>Las rutas están listas para revisión. Sus reservas ruteadas siguen HELD y no caducan automáticamente.</Alert>}
+          {run.status === "READY" && <Alert severity="info" sx={{ mt: 1 }}>{routes.length ? "Las rutas están listas para revisión. Las reservas de pedidos ruteados siguen HELD." : "El procesamiento terminó sin rutas. Revisa las excepciones; no hay reservas de pedidos ruteados."}</Alert>}
+          {run.status === "CANCELED" && <Alert severity="warning" sx={{ mt: 1 }}>Corrida cancelada. Las rutas mostradas son históricas y sus reservas fueron liberadas.</Alert>}
+          {run.status === "ACCEPTED" && <Alert severity="success" sx={{ mt: 1 }}>Corrida aceptada. Las reservas de pedidos ruteados están CONFIRMED.</Alert>}
           {run.error && <Alert severity="error" sx={{ mt: 1 }}>{problemNames[run.error] ?? run.error}</Alert>}
           <Typography variant="body2" sx={{ mt: 1 }}>Snapshot {run.inventory_snapshot_id.slice(0, 8)} · Política {run.input.allocation_policy as string}</Typography>
         </Paper>}
 
         <Box className="workspace-grid">
-          <Paper className="map-panel"><Box className="panel-heading"><Typography sx={{ fontWeight: 750 }}>Rutas de la revisión</Typography><Typography variant="caption">{routes.length} rutas</Typography></Box><RouteMap run={run} selectedVehicleId={selectedVehicleId} /></Paper>
+          <Paper className="map-panel"><Box className="panel-heading"><Typography sx={{ fontWeight: 750 }}>Rutas de la revisión</Typography><Typography variant="caption">{routes.length} rutas</Typography></Box><RouteMap run={run} selectedVehicleId={selectedVehicleId} onShowAll={() => setSelectedVehicleId(null)} />
+            <div className="map-legend"><span><i className="legend-center" />CD · inicio/fin</span><span><i className="legend-delivery" />Entrega · pulsa para ver pedidos coincidentes</span>{routes.map((route) => <span key={route.vehicle_id}><i className="legend-delivery" style={{ background: routeColorForVehicle(route.source_vehicle_id) }} />{route.source_vehicle_id} · {route.distribution_center_id}</span>)}</div>
+          </Paper>
           <Stack spacing={2}>
             <Paper className="side-panel"><Typography variant="h6">Rutas</Typography>
               {routes.map((route) => <Button key={route.vehicle_id} onClick={() => setSelectedVehicleId(route.source_vehicle_id === selectedVehicleId ? null : route.source_vehicle_id)}>{route.source_vehicle_id} · {route.distribution_center_id} · {route.steps.filter((step) => step.kind === "DELIVERY").length} entregas</Button>)}
-              <RouteSequence routes={routes} />
+              <RouteSequence routes={routes} finished={!!run && ["READY", "ACCEPTED", "CANCELED"].includes(run.status)} />
             </Paper>
             <Paper className="side-panel"><Typography variant="h6">Asignación y reservas</Typography>
               {run?.decisions.map((decision) => <Box key={decision.order_id} className="exception-row">
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}><Typography sx={{ fontWeight: 700 }}>{decision.order_id} → {decision.center_id ?? "Sin CD"}</Typography><Chip size="small" label={decision.reservation_status ?? "Sin reserva"} /></Stack>
                 {decision.reason_code && <Typography color="warning.main" variant="body2">{decision.reason_code}: {problemNames[decision.reason_code]}</Typography>}
-                <Typography variant="caption" color="text.secondary">{decision.evidence.policy_version} · {decision.evidence.candidates.map((item) => `${item.center_id}: ${item.discard_reason ?? "elegido"}${item.duration_seconds === null ? "" : `, ${item.duration_seconds}s`}`).join(" · ")}</Typography>
+                <Typography variant="caption" color="text.secondary">{decision.evidence.policy_version} · {decision.evidence.candidates.map((item) => `${item.center_id}: ${item.discard_reason ?? "elegido"}${item.duration_seconds === null ? "" : `, ${item.duration_seconds}s`}${item.remaining_orders_with_alternative == null ? "" : `, futuros con alternativa ${item.remaining_orders_with_alternative}`}`).join(" · ")}</Typography>
+                {decision.evidence.policy_version === "alternatives-v2" && <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>La política puede escoger un CD más lejano para conservar opciones para otros pedidos; no garantiza un óptimo global.</Typography>}
               </Box>)}
+              {run?.kpis?.network_coverage && <Box className="exception-row"><Typography sx={{ fontWeight: 700 }}>Cobertura vial · límite {run.kpis.network_coverage.max_snap_distance_m} m</Typography>{run.kpis.network_coverage.points.map((point, index) => <Typography key={index} variant="caption" sx={{ display: "block" }}>{point.role} {point.business_id ?? index}: origen {point.original.join(", ")} · red {point.snapped?.join(", ") ?? "sin punto"} · ajuste {point.distance_m == null ? "sin medición" : `${point.distance_m} m`}</Typography>)}</Box>}
             </Paper>
             <Paper className="side-panel"><Typography variant="h6">Excepciones</Typography>
               {exceptions.map((item) => <Box key={item.order_id} className="exception-row"><Typography sx={{ fontWeight: 700 }}>{item.order_id} · {item.stage}</Typography><Typography variant="body2">{problemNames[item.reasons[0]?.code ?? ""] ?? item.reasons[0]?.code}</Typography><Chip size="small" label={item.reasons[0]?.certainty === "PROVEN" ? "Comprobado" : "Inferido"} /></Box>)}

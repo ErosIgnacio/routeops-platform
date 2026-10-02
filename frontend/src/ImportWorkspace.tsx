@@ -199,6 +199,7 @@ export function ImportWorkspace() {
   const [busy, setBusy] = useState<"scenario" | "upload" | "validation" | "publication" | null>(null);
   const [notice, setNotice] = useState<{ severity: "error" | "success" | "info"; text: string } | null>(null);
   const operation = useRef(false);
+  const latestBatchRef = useRef<ImportBatch | null>(null);
 
   const remember = useCallback((next: Partial<SavedDraft>) => {
     const current = readDraft();
@@ -219,7 +220,9 @@ export function ImportWorkspace() {
 
   const loadImports = useCallback(async (currentScenario: string, offset = 0) => {
     const page = await listImports(currentScenario, offset);
-    setImports((current) => offset === 0 ? page.items : [...current, ...page.items]);
+    const items = page.items.map((item) => latestBatchRef.current?.id === item.id
+      ? latestBatchRef.current : item);
+    setImports((current) => offset === 0 ? items : [...current, ...items]);
     setImportOffset(page.next_offset);
   }, []);
 
@@ -236,6 +239,8 @@ export function ImportWorkspace() {
       getValidation(currentScenario, currentBatch),
     ]);
     setBatch(loadedBatch);
+    latestBatchRef.current = loadedBatch;
+    setImports((current) => current.map((item) => item.id === currentBatch ? loadedBatch : item));
     setBatchId(currentBatch);
     setValidation(loadedValidation);
     remember({ scenarioId: currentScenario, batchId: currentBatch });
@@ -282,6 +287,7 @@ export function ImportWorkspace() {
   useEffect(() => { remember({ scenarioId, batchId, uploadKey, context }); }, [scenarioId, batchId, uploadKey, context, remember]);
 
   const selectScenario = (nextId: string) => {
+    latestBatchRef.current = null;
     setScenarioId(nextId);
     setBatch(null);
     setBatchId("");
@@ -308,6 +314,7 @@ export function ImportWorkspace() {
   };
 
   const newUpload = () => {
+    latestBatchRef.current = null;
     setBatch(null);
     setBatchId("");
     setUploadKey("");
@@ -353,7 +360,7 @@ export function ImportWorkspace() {
       const result = await requestValidation(scenarioId, batchId, payload);
       setValidation(result);
       await recoverBatch(scenarioId, batchId);
-      setNotice({ severity: "info", text: "Validación solicitada. El trabajo se recupera automáticamente tras interrupciones." });
+      setNotice({ severity: result.status === "VALID" ? "success" : "info", text: result.status === "VALID" ? "El lote ya está validado; aún no es una revisión publicada." : "Validación solicitada. El trabajo se recupera automáticamente tras interrupciones." });
     } catch (reason) {
       await recoverBatch(scenarioId, batchId).catch(() => undefined);
       setNotice({ severity: "error", text: errorText(reason) });
@@ -387,7 +394,7 @@ export function ImportWorkspace() {
   };
 
   const blocker = publicationBlocker(batch, validation);
-  const activeStatus = validation?.status ?? batch?.status;
+  const activeStatus = batch?.status === "PUBLISHED" ? "PUBLISHED" : validation?.status ?? batch?.status;
 
   return (
     <Box className="shell">

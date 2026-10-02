@@ -72,6 +72,12 @@ are recorded in [the 2.4 guide](milestone-2-4-allocation.md). The 2.5 run
 lifecycle, demos and measured local solver workload are recorded in
 [the 2.5 guide](milestone-2-5-planning.md).
 
+The [v0.2.1 correction](v0.2.1-routing-ui.md) was formally accepted by the user,
+including its visual review, on 2026-10-01. It closes the road-network snapping
+and visual workflow findings with the automated results and browser evidence
+summarized in that guide. The `v0.2.0` acceptance record remains historical;
+Milestone 3 implementation awaits a separate instruction.
+
 Approved delivery sequence (2026-09-28):
 
 1. **2.1:** input contracts, reproducible templates, and bounded validation.

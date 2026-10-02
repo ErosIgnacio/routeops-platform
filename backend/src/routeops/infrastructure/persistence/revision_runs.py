@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from typing import cast as type_cast
 from uuid import UUID, uuid4
 
 from geoalchemy2.elements import WKTElement
@@ -43,6 +44,7 @@ from routeops.domain.policies.allocation import TravelTimeProvider
 from routeops.domain.policies.operational_allocation import OperationalAllocationPolicy
 from routeops.infrastructure.persistence.models import (
     AllocationAttemptModel,
+    AllocationDecisionSnapshotModel,
     AllocationOrderDecisionModel,
     OptimizedRouteModel,
     OrderModel,
@@ -59,7 +61,7 @@ from routeops.infrastructure.persistence.operational_allocation import (
     AllocationError,
     OperationalAllocationService,
 )
-from routeops.infrastructure.routing.errors import RoutingDependencyError
+from routeops.infrastructure.routing.errors import RoutingCoverageError, RoutingDependencyError
 from routeops.infrastructure.routing.osrm import OsrmClient
 from routeops.infrastructure.solver.errors import (
     SolverDependencyError,
@@ -109,6 +111,7 @@ class RevisionRunService:
         timeout_seconds: int = 15,
         lease_seconds: int = 120,
         max_attempts: int = 3,
+        max_snap_distance_m: float = 250,
     ) -> None:
         self.sessions = sessions
         self.allocation = allocation
@@ -118,6 +121,7 @@ class RevisionRunService:
         self.timeout_seconds = timeout_seconds
         self.lease_seconds = lease_seconds
         self.max_attempts = max_attempts
+        self.max_snap_distance_m = max_snap_distance_m
 
     @staticmethod
     def _locked_job(session: Session, run_id: UUID) -> RevisionRunJobModel | None:
@@ -355,6 +359,7 @@ class RevisionRunService:
             AllocationError,
             RunInputError,
             RoutingDependencyError,
+            RoutingCoverageError,
             SolverDependencyError,
             SolverInputError,
             SolverResponseError,
@@ -362,7 +367,9 @@ class RevisionRunService:
             logger.warning(
                 "planning_run_failed", extra={"run_id": str(run_id), "kind": type(exc).__name__}
             )
-            if isinstance(exc, RoutingDependencyError):
+            if isinstance(exc, RoutingCoverageError):
+                code = exc.code
+            elif isinstance(exc, RoutingDependencyError):
                 code = "ROUTING_DEPENDENCY_FAILED"
             elif isinstance(exc, SolverDependencyError):
                 code = "SOLVER_DEPENDENCY_FAILED"
@@ -372,7 +379,10 @@ class RevisionRunService:
                 code = "SOLVER_INPUT_INVALID"
             else:
                 code = exc.code
-            self._fail(run_id, token, code)
+            self._fail(
+                run_id, token, code,
+                exc.evidence if isinstance(exc, RoutingCoverageError) else None,
+            )
         except Exception:
             logger.exception("planning_run_failed_unexpected", extra={"run_id": str(run_id)})
             self._fail(run_id, token, "PLANNING_INFRASTRUCTURE_FAILED")
@@ -415,10 +425,22 @@ class RevisionRunService:
             policy_version = job.policy_version
         if not self._active(run_id, token):
             return
+        snap_evidence: list[dict[str, object]] = []
         if existing_attempt is None:
             origins = tuple(center.location for center in prepared.centers)
             destinations = tuple(order.location for order in prepared.orders)
-            matrix = self.osrm.duration_matrix(origins, destinations)
+            try:
+                checked = self.osrm.checked_duration_matrix(
+                    origins, destinations, self.max_snap_distance_m
+                )
+            except RoutingCoverageError as exc:
+                self._label_snaps(exc.evidence, prepared.centers, prepared.orders)
+                raise
+            matrix = checked.durations
+            snap_evidence = checked.snaps
+            self._label_snaps(snap_evidence, prepared.centers, prepared.orders)
+            for item in snap_evidence:
+                item["max_snap_distance_m"] = self.max_snap_distance_m
             if not self._active(run_id, token):
                 return
             cached = FrozenTravelTimes(origins, destinations, matrix)
@@ -428,6 +450,7 @@ class RevisionRunService:
                 str(run_id),
                 policy_version=policy_version,
                 travel_times=cached,
+                network_evidence=snap_evidence,
             )
             attempt_id = UUID(allocation["id"])
             if not self._link_allocation(run_id, token, attempt_id):
@@ -435,17 +458,31 @@ class RevisionRunService:
                 return
         else:
             attempt_id = existing_attempt
+            with self.sessions() as session:
+                snapshot = session.get(AllocationDecisionSnapshotModel, attempt_id)
+                if snapshot is not None:
+                    snap_evidence = snapshot.inventory_data.get("network_coverage", [])
         if not self._active(run_id, token):
             return
         assigned, allocation_unassigned = self._decisions(attempt_id)
         problem = prepared.problem(run_id, assigned, quality, self.timeout_seconds)
         if problem.tasks:
             solved = self.solver.solve(problem)
-            reconcile_result(problem, solved)
+            reconcile_result(problem, solved, self.max_snap_distance_m)
         else:
             solved = self._empty_result(problem)
         result = self._merge_unassigned(solved, allocation_unassigned)
-        self._finish(run_id, token, result, problem)
+        self._finish(run_id, token, result, problem, snap_evidence)
+
+    @staticmethod
+    def _label_snaps(
+        snaps: list[dict[str, object]], centers: tuple[Any, ...], orders: tuple[Any, ...]
+    ) -> None:
+        for item in snaps:
+            index = type_cast(int, item["index"])
+            item["business_id"] = (
+                centers[index].id if item["role"] == "center" else orders[index].id
+            )
 
     def _revision_number(self, revision_id: UUID) -> int:
         with self.sessions() as session:
@@ -631,7 +668,8 @@ class RevisionRunService:
         return WKTElement(f"LINESTRING ({points})", srid=4326)
 
     def _finish(
-        self, run_id: UUID, token: UUID, result: OptimizationResult, problem: OptimizationProblem
+        self, run_id: UUID, token: UUID, result: OptimizationResult,
+        problem: OptimizationProblem, snap_evidence: list[dict[str, object]],
     ) -> bool:
         data = to_primitive(result)
         kpis = DemoPlanningService._kpis(result)
@@ -656,7 +694,10 @@ class RevisionRunService:
             run = session.get(PlanningRunModel, run_id)
             assert run is not None
             run.result_data = data
-            run.kpis = kpis
+            run.kpis = {**kpis, "network_coverage": {
+                "max_snap_distance_m": self.max_snap_distance_m,
+                "points": snap_evidence,
+            }}
             decisions = list(
                 session.execute(
                     select(AllocationOrderDecisionModel.id, OrderModel.source_id)
@@ -700,7 +741,10 @@ class RevisionRunService:
             self._transition(session, job, "READY", "SOLVER_RECONCILED")
         return True
 
-    def _fail(self, run_id: UUID, token: UUID, code: str) -> None:
+    def _fail(
+        self, run_id: UUID, token: UUID, code: str,
+        snap_evidence: list[dict[str, object]] | None = None,
+    ) -> None:
         with self.sessions.begin() as session:
             job = session.get(RevisionRunJobModel, run_id)
             if job is None:
@@ -723,6 +767,11 @@ class RevisionRunService:
             run = session.get(PlanningRunModel, run_id)
             assert run is not None
             run.error = code
+            if snap_evidence is not None:
+                run.kpis = {"network_coverage": {
+                    "max_snap_distance_m": self.max_snap_distance_m,
+                    "points": snap_evidence,
+                }}
             self._transition(session, job, "FAILED", code)
 
     def _exhausted(self, run_id: UUID) -> None:

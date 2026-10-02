@@ -2,7 +2,7 @@ import { Box, Table, TableBody, TableCell, TableHead, TableRow, Typography } fro
 
 import type { OptimizedRoute } from "./types";
 
-export function RouteSequence({ routes }: { routes: OptimizedRoute[] }) {
+export function RouteSequence({ routes, finished = false }: { routes: OptimizedRoute[]; finished?: boolean }) {
   const stops = routes.flatMap((route) =>
     route.steps.map((step) => ({
       key: `${route.vehicle_id}-${step.sequence}`,
@@ -16,7 +16,7 @@ export function RouteSequence({ routes }: { routes: OptimizedRoute[] }) {
   if (stops.length === 0) {
     return (
       <Typography className="empty-state" color="text.secondary">
-        Run the optimizer to inspect its stop sequence.
+        {finished ? "La corrida terminó sin rutas. Consulta las excepciones y reservas." : "Solicita una corrida para consultar la secuencia de paradas."}
       </Typography>
     );
   }

@@ -1,4 +1,4 @@
-import { act, render } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PlanningRun } from "./types";
@@ -16,6 +16,7 @@ vi.mock("maplibre-gl", () => {
     routeSetData = vi.fn();
     stopSetData = vi.fn();
     fitBounds = vi.fn();
+    resize = vi.fn();
     addControl = vi.fn();
     remove = vi.fn();
 
@@ -133,5 +134,34 @@ describe("RouteMap", () => {
       selected: true,
       selectionActive: true,
     });
+  });
+
+  it("preserves camera on status polling and resizes with its container", () => {
+    maplibreState.sourcesReadyByDefault = true;
+    let notifyResize: (() => void) | undefined;
+    const disconnect = vi.fn();
+    const original = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) { notifyResize = () => callback([], this); }
+      observe() {}
+      unobserve() {}
+      disconnect() { disconnect(); }
+    };
+    try {
+      const run = runFor("VEH-CENTRO-01", -70.66);
+      const { container, rerender, unmount } = render(<RouteMap run={run} selectedVehicleId={null} />);
+      const map = maplibreState.instances.at(-1)!;
+      expect(map.fitBounds).toHaveBeenCalledOnce();
+      rerender(<RouteMap run={{ ...run, status: "ACCEPTED" }} selectedVehicleId={null} />);
+      expect(map.fitBounds).toHaveBeenCalledOnce();
+      act(() => notifyResize?.());
+      expect(map.resize).toHaveBeenCalledOnce();
+      fireEvent.click(container.querySelector(".map-actions button")!);
+      expect(map.fitBounds).toHaveBeenCalledTimes(2);
+      unmount();
+      expect(disconnect).toHaveBeenCalledOnce();
+    } finally {
+      globalThis.ResizeObserver = original;
+    }
   });
 });

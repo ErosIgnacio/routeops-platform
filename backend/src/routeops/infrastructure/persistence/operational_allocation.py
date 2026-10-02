@@ -60,6 +60,7 @@ class OperationalAllocationService:
         policy_version: str = OperationalAllocationPolicy.ALTERNATIVES,
         actor: str = "routeops",
         travel_times: TravelTimeProvider | None = None,
+        network_evidence: list[dict[str, object]] | None = None,
     ) -> dict[str, Any]:
         if not 1 <= len(client_key) <= 100 or not 1 <= len(actor) <= 100:
             raise AllocationError("ALLOCATION_KEY_INVALID", 422)
@@ -161,6 +162,8 @@ class OperationalAllocationService:
                             if row.sku in relevant_skus
                         ],
                     }
+                    if network_evidence is not None:
+                        inventory_data["network_coverage"] = network_evidence
                     fingerprint = hashlib.sha256(
                         json.dumps(inventory_data, sort_keys=True, separators=(",", ":")).encode()
                     ).hexdigest()

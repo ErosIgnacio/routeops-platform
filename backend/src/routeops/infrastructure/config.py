@@ -32,6 +32,7 @@ class Settings:
     planning_lease_seconds: int
     planning_max_attempts: int
     planning_poll_seconds: int
+    planning_max_snap_distance_m: float
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -47,6 +48,9 @@ class Settings:
         planning_lease = int(os.getenv("ROUTEOPS_PLANNING_LEASE_SECONDS", "120"))
         planning_attempts = int(os.getenv("ROUTEOPS_PLANNING_MAX_ATTEMPTS", "3"))
         planning_poll = int(os.getenv("ROUTEOPS_PLANNING_POLL_SECONDS", "5"))
+        max_snap_distance_m = float(
+            os.getenv("ROUTEOPS_PLANNING_MAX_SNAP_DISTANCE_M", "250")
+        )
         if (
             min(
                 retention_days,
@@ -61,6 +65,8 @@ class Settings:
             <= 0
         ):
             raise ValueError("import and planning worker intervals must be positive")
+        if not 0 < max_snap_distance_m <= 5000:
+            raise ValueError("ROUTEOPS_PLANNING_MAX_SNAP_DISTANCE_M must be in (0, 5000]")
         return cls(
             environment=os.getenv("ROUTEOPS_ENV", "development"),
             log_level=os.getenv("ROUTEOPS_LOG_LEVEL", "INFO"),
@@ -107,4 +113,5 @@ class Settings:
             planning_lease_seconds=planning_lease,
             planning_max_attempts=planning_attempts,
             planning_poll_seconds=planning_poll,
+            planning_max_snap_distance_m=max_snap_distance_m,
         )

@@ -157,6 +157,7 @@ application modules never import VROOM JSON or SQLAlchemy models. Full design:
 - [CSV/XLSX data contracts](docs/data-contracts.md)
 - [Optimization contracts](docs/optimization-contract.md)
 - [VROOM/OSRM assessment](docs/research/toolchain-versions.md)
+- [Accepted v0.2.1 routing and UI correction](docs/v0.2.1-routing-ui.md)
 - [Milestone 1 runtime validation](docs/research/milestone-1-validation.md)
 - [ADR-0001: VROOM and OSRM](docs/adr/0001-vroom-osrm.md)
 - [ADR-0002: approved product decisions](docs/adr/0002-approved-product-decisions.md)

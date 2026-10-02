@@ -106,6 +106,7 @@ revision_planning = RevisionRunService(
     timeout_seconds=settings.solver_timeout_seconds,
     lease_seconds=settings.planning_lease_seconds,
     max_attempts=settings.planning_max_attempts,
+    max_snap_distance_m=settings.planning_max_snap_distance_m,
 )
 demo_catalog = DemoCatalogService(
     scenario_repository, object_storage, upload_service, validation_service, publication_service

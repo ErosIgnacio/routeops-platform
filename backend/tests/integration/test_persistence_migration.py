@@ -115,6 +115,8 @@ from routeops.infrastructure.storage.maintenance import ImportStorageMaintenance
 pytestmark = pytest.mark.integration
 ALEMBIC_INI = Path(__file__).resolve().parents[2] / "alembic.ini"
 SHA = "a" * 64
+OSRM_TEST_URL = os.getenv("ROUTEOPS_TEST_OSRM_URL", "http://127.0.0.1:5000")
+VROOM_TEST_URL = os.getenv("ROUTEOPS_TEST_VROOM_URL", "http://127.0.0.1:3000")
 TRIGGER_COUNT_SQL = "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgname LIKE 'trg_%'"
 
 
@@ -2081,12 +2083,12 @@ def test_revision_run_reaches_real_vroom_and_accepts_reservations(
 ) -> None:
     scenario, _, _ = _published_allocation_fixture(database, tmp_path)
     sessions = create_session_factory(database)
-    osrm = OsrmClient("http://127.0.0.1:5000")
+    osrm = OsrmClient(OSRM_TEST_URL)
     service = RevisionRunService(
         sessions,
         OperationalAllocationService(sessions, osrm),
         osrm,
-        VroomAdapter("http://127.0.0.1:3000"),
+        VroomAdapter(VROOM_TEST_URL),
         WorkloadLimits(),
     )
     queued, created = service.submit(scenario, 1, "real-solver")
@@ -2106,12 +2108,12 @@ def test_run_result_insert_failure_rolls_back_and_releases_holds(
 ) -> None:
     scenario, _, _ = _published_allocation_fixture(database, tmp_path)
     sessions = create_session_factory(database)
-    osrm = OsrmClient("http://127.0.0.1:5000")
+    osrm = OsrmClient(OSRM_TEST_URL)
     service = RevisionRunService(
         sessions,
         OperationalAllocationService(sessions, osrm),
         osrm,
-        VroomAdapter("http://127.0.0.1:3000"),
+        VroomAdapter(VROOM_TEST_URL),
         WorkloadLimits(),
     )
 
@@ -2149,12 +2151,12 @@ def test_isolated_demo_catalog_publishes_all_four_fixtures(
         )
     }
     assert len({item["scenario_id"] for item in prepared.values()}) == 4
-    osrm = OsrmClient("http://127.0.0.1:5000")
+    osrm = OsrmClient(OSRM_TEST_URL)
     service = RevisionRunService(
         sessions,
         OperationalAllocationService(sessions, osrm),
         osrm,
-        VroomAdapter("http://127.0.0.1:3000"),
+        VroomAdapter(VROOM_TEST_URL),
         WorkloadLimits(),
     )
     results: dict[str, dict[str, object]] = {}
@@ -2185,6 +2187,45 @@ class FixedMatrix:
         self, origins: tuple[object, ...], destinations: tuple[object, ...]
     ) -> tuple[tuple[int, ...], ...]:
         return tuple(tuple(100 for _ in destinations) for _ in origins)
+
+    def checked_duration_matrix(
+        self, origins: tuple[object, ...], destinations: tuple[object, ...],
+        max_snap_distance_m: float,
+    ) -> object:
+        from routeops.infrastructure.routing.osrm import AllocationMatrix
+
+        return AllocationMatrix(self.duration_matrix(origins, destinations), [])  # type: ignore[arg-type]
+
+
+def test_uncovered_point_fails_before_reserving_stock(database: Engine, tmp_path: Path) -> None:
+    from routeops.infrastructure.routing.errors import RoutingCoverageError
+
+    scenario, _, _ = _published_allocation_fixture(database, tmp_path)
+
+    class UncoveredMatrix(FixedMatrix):
+        def checked_duration_matrix(
+            self, origins: tuple[object, ...], destinations: tuple[object, ...],
+            max_snap_distance_m: float,
+        ) -> object:
+            raise RoutingCoverageError("ROUTING_SNAP_TOO_FAR", [
+                {"role": "center", "index": 0, "original": [-70.7, -33.44],
+                 "snapped": [-70.68, -33.435], "distance_m": 1902.0},
+            ])
+
+    sessions = create_session_factory(database)
+    service = RevisionRunService(
+        sessions, OperationalAllocationService(sessions, FixedAllocationTravel()),
+        UncoveredMatrix(), AllUnassignedSolver(), WorkloadLimits(),  # type: ignore[arg-type]
+    )
+    queued, _ = service.submit(scenario, 1, "uncovered")
+    assert service.process_once()
+    result = service.get(UUID(queued["run_id"]))
+    assert result["status"] == "FAILED"
+    assert result["error"] == "ROUTING_SNAP_TOO_FAR"
+    assert result["kpis"]["network_coverage"]["points"][0]["business_id"] == "CD-001"
+    with sessions() as session:
+        assert session.scalar(select(func.count()).select_from(AllocationAttemptModel)) == 0
+        assert session.scalar(select(func.count()).select_from(AllocationReservationLineModel)) == 0
 
 
 class AllUnassignedSolver:
@@ -2455,12 +2496,12 @@ def test_two_revision_runs_compete_for_one_stock_position(database: Engine, tmp_
     rows["order_lines"][0]["quantity"] = "7"
     scenario, _, _ = _published_allocation_fixture(database, tmp_path, rows)
     sessions = create_session_factory(database)
-    osrm = OsrmClient("http://127.0.0.1:5000")
+    osrm = OsrmClient(OSRM_TEST_URL)
     service = RevisionRunService(
         sessions,
         OperationalAllocationService(sessions, osrm),
         osrm,
-        VroomAdapter("http://127.0.0.1:3000"),
+        VroomAdapter(VROOM_TEST_URL),
         WorkloadLimits(),
     )
     first, _ = service.submit(scenario, 1, "compete-1")
@@ -2535,12 +2576,12 @@ def test_accept_cancel_race_is_serialized_and_keeps_stock_consistent(
 ) -> None:
     scenario, _, _ = _published_allocation_fixture(database, tmp_path)
     sessions = create_session_factory(database)
-    osrm = OsrmClient("http://127.0.0.1:5000")
+    osrm = OsrmClient(OSRM_TEST_URL)
     service = RevisionRunService(
         sessions,
         OperationalAllocationService(sessions, osrm),
         osrm,
-        VroomAdapter("http://127.0.0.1:3000"),
+        VroomAdapter(VROOM_TEST_URL),
         WorkloadLimits(),
     )
     queued, _ = service.submit(scenario, 1, "race")
