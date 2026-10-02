@@ -32,6 +32,82 @@ class Base(DeclarativeBase):
     pass
 
 
+class PlanComparisonModel(Base):
+    __tablename__ = "plan_comparisons"
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    scenario_id: Mapped[UUID] = mapped_column(ForeignKey("scenarios.id", ondelete="RESTRICT"))
+    scenario_revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("scenario_revisions.id", ondelete="RESTRICT"))
+    client_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    context_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    context_data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (
+        UniqueConstraint("scenario_id", "client_key", name="uq_comparison_key"),
+        CheckConstraint("length(client_key) BETWEEN 1 AND 100", name="ck_comparison_key"),
+        CheckConstraint("request_sha256 ~ '^[0-9a-f]{64}$' AND "
+                        "context_sha256 ~ '^[0-9a-f]{64}$'", name="ck_comparison_hashes"),
+        Index("ix_comparison_revision_created", "scenario_revision_id", "created_at"),
+    )
+
+
+class ComparisonJobModel(Base):
+    __tablename__ = "comparison_jobs"
+    comparison_id: Mapped[UUID] = mapped_column(
+        ForeignKey("plan_comparisons.id", ondelete="RESTRICT"), primary_key=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False)
+    lease_token: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    transitioned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (
+        CheckConstraint("status IN ('QUEUED','RUNNING','READY','FAILED')",
+                        name="ck_comparison_job_status"),
+        CheckConstraint("attempts >= 0 AND version >= 0", name="ck_comparison_job_counters"),
+        CheckConstraint("(lease_token IS NULL) = (lease_until IS NULL)",
+                        name="ck_comparison_job_lease"),
+        Index("ix_comparison_job_claim", "status", "next_attempt_at", "lease_until"),
+    )
+
+
+class ComparisonEventModel(Base):
+    __tablename__ = "comparison_events"
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    comparison_id: Mapped[UUID] = mapped_column(
+        ForeignKey("comparison_jobs.comparison_id", ondelete="RESTRICT"), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    from_status: Mapped[str | None] = mapped_column(String(20))
+    to_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(String(80), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (
+        UniqueConstraint("comparison_id", "sequence", name="uq_comparison_event_sequence"),
+        CheckConstraint("sequence >= 0 AND attempt_no >= 0", name="ck_comparison_event_counters"),
+    )
+
+
+class ComparisonResultModel(Base):
+    __tablename__ = "comparison_results"
+    comparison_id: Mapped[UUID] = mapped_column(
+        ForeignKey("comparison_jobs.comparison_id", ondelete="RESTRICT"), primary_key=True)
+    context_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    document: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    owner_token: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (
+        CheckConstraint("content_sha256 ~ '^[0-9a-f]{64}$' AND "
+                        "context_sha256 ~ '^[0-9a-f]{64}$'", name="ck_comparison_result_hashes"),
+        CheckConstraint("attempt_no > 0", name="ck_comparison_result_attempt"),
+    )
+
+
 class PlanningRunModel(Base):
     __tablename__ = "planning_runs"
 

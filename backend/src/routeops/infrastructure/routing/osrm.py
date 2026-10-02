@@ -6,6 +6,7 @@ from typing import cast
 
 import httpx
 
+from routeops.application.ports.fixed_route import FixedRoadRoute
 from routeops.domain.models import Coordinate
 from routeops.infrastructure.routing.errors import RoutingCoverageError, RoutingDependencyError
 
@@ -165,6 +166,58 @@ class OsrmClient:
             raise
         except (httpx.HTTPError, KeyError, TypeError, ValueError, OverflowError) as exc:
             raise RoutingDependencyError("OSRM allocation matrix failed") from exc
+
+    def route_sequence(
+        self, points: tuple[Coordinate, ...], max_snap_distance_m: float,
+    ) -> FixedRoadRoute:
+        """Route supplied waypoints in their exact order; never use OSRM trip."""
+        if len(points) < 2:
+            raise ValueError("fixed road route requires endpoints")
+        path = ";".join(f"{p.longitude},{p.latitude}" for p in points)
+        try:
+            response = httpx.get(
+                f"{self._base_url}/route/v1/driving/{path}",
+                params={"overview": "full", "geometries": "geojson", "steps": "false"},
+                timeout=self._timeout,
+            )
+            payload = response.json()
+            if payload.get("code") in ("NoSegment", "NoRoute"):
+                raise RoutingCoverageError("ROUTING_NO_PATH", [])
+            response.raise_for_status()
+            if payload.get("code") != "Ok" or len(payload["waypoints"]) != len(points):
+                raise ValueError("invalid fixed road response")
+            route = payload["routes"][0]
+            legs = route["legs"]
+            if len(legs) != len(points) - 1:
+                raise ValueError("fixed road leg count mismatch")
+            snaps: list[dict[str, object]] = []
+            for index, (point, waypoint) in enumerate(
+                zip(points, payload["waypoints"], strict=True)
+            ):
+                distance = float(waypoint["distance"])
+                location = waypoint["location"]
+                if not math.isfinite(distance) or distance < 0 or len(location) != 2:
+                    raise ValueError("invalid road waypoint")
+                if not all(math.isfinite(float(v)) for v in location):
+                    raise ValueError("invalid road coordinates")
+                snaps.append({"index": index, "original": [point.longitude, point.latitude],
+                              "snapped": location, "distance_m": distance})
+            if any(cast(float, item["distance_m"]) > max_snap_distance_m for item in snaps):
+                raise RoutingCoverageError("ROUTING_SNAP_TOO_FAR", snaps)
+            if any(not math.isfinite(float(leg[key])) or float(leg[key]) < 0
+                   for leg in legs for key in ("duration", "distance")):
+                raise ValueError("invalid road leg metrics")
+            geometry = tuple(Coordinate(float(lat), float(lon))
+                             for lon, lat in route["geometry"]["coordinates"])
+            if len(geometry) < 2:
+                raise ValueError("fixed route geometry unavailable")
+            return FixedRoadRoute(tuple(round(float(leg["duration"])) for leg in legs),
+                                  tuple(round(float(leg["distance"])) for leg in legs),
+                                  geometry, tuple(snaps))
+        except RoutingCoverageError:
+            raise
+        except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, OverflowError) as exc:
+            raise RoutingDependencyError("OSRM fixed sequence evaluation failed") from exc
 
     def health(self) -> dict[str, str]:
         coordinates = "-70.6635,-33.4445;-70.6580,-33.4420"

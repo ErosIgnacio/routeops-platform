@@ -365,6 +365,8 @@ def test_invalid_import_diagnostics_are_separate_from_any_published_run(
 
 
 def test_timing_guard_still_blocks_loss_when_diagnostic_table_is_empty(database: Engine) -> None:
+    with database.connect() as connection:
+        starting_head = connection.scalar(text("SELECT version_num FROM alembic_version"))
     sessions = create_session_factory(database)
     repository = DatabaseRunRepository(sessions)
     run_id, token = uuid4(), uuid4()
@@ -381,7 +383,7 @@ def test_timing_guard_still_blocks_loss_when_diagnostic_table_is_empty(database:
     with pytest.raises(RuntimeError, match="processing measurements contain history"):
         command.downgrade(Config(str(ALEMBIC_INI)), "e3a1b7c9d240")
     with database.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "a71c9e3d602b"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == starting_head
         assert connection.scalar(text("SELECT count(*) FROM planning_timing_events")) == 1
         assert connection.scalar(text("SELECT count(*) FROM planning_diagnostics")) == 0
     assert repository.get(run_id) == before

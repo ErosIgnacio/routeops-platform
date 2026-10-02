@@ -7,7 +7,8 @@ center. All business data in this repository is synthetic.
 
 > Status: **Milestones 1 and 2 accepted and published; routing/UI corrections
 > accepted as `v0.2.1`. Delivery 3.1 is accepted, including contracts, costs,
-> KPIs, diagnostics and synthetic B2B/B2C cases.**
+> KPIs, diagnostics and synthetic B2B/B2C cases, published at `0f95fcf507ea219345836cbaeca26e86c1787bd4`.
+> Delivery 3.2 comparison API is implemented for review, not committed or published.**
 >
 > Local Docker Desktop/WSL2 runtime, durable import/planning workers, transactional
 > inventory reservations, real OSRM/VROOM and browser workflows are verified in
@@ -46,6 +47,11 @@ in [3.1c, including the joint 3.1 validation](docs/milestone-3-1c-diagnostics.md
 
 Delivery 3.1b adds [versioned plan KPIs and processing measurements](docs/milestone-3-1b-metrics.md),
 without changing historical plan results. Its acceptance records the explicit pre-commit timing boundary.
+
+[Delivery 3.2](docs/milestone-3-2-plan-comparison.md) compares an explicit manual
+sequence with `greedy-v1` and `alternatives-v2` against one frozen context.
+These analytical jobs use no operational reservations. The new Compose
+`comparison-worker` executes them; their interface and exports remain 3.3 scope.
 
 ## Quick start
 
@@ -119,6 +125,9 @@ The import workspace, its recovery flow and performance measurements are in
 | `GET` | `/api/v1/scenarios/{scenario_id}/imports/{batch_id}/diagnostics` | Input incidences kept separate from run exclusions (3.1c) |
 | `GET` | `/api/v1/operation-cases` | Reproducible B2B/B2C case names (3.1c) |
 | `POST` | `/api/v1/operation-cases/{name}/prepare` | Import, validate and publish into a new isolated scenario (3.1c) |
+| `POST` | `/api/v1/scenarios/{scenario_id}/revisions/{revision_no}/comparisons` | Queue an idempotent analytical comparison (3.2 candidate) |
+| `GET` | `/api/v1/comparisons/{comparison_id}` | Frozen context, manual input, job state, result and history |
+| `GET` | `/api/v1/scenarios/{scenario_id}/comparisons` | Paginated comparison history |
 | `GET` | `/health/live` | Process liveness only |
 | `GET` | `/health/ready` | Aggregate database/VROOM/OSRM readiness |
 | `GET` | `/health/dependencies` | Per-dependency diagnostic status |
@@ -204,5 +213,6 @@ models directly; this existing boundary limitation is documented in the design:
 - Apache-2.0 repository license.
 - Small bounded Santiago OSM extract with source, bbox, timestamp, and SHA-256.
 - Closed routes returning to their originating distribution center.
-- Manual baseline imports vehicle/order sequence and optional planned times;
-  RouteOps recomputes route facts with the same pinned OSRM dataset.
+- Manual baseline evaluation in 3.2 accepts vehicle/CD/ordered order IDs;
+  RouteOps recomputes route facts with the same pinned OSRM dataset. Optional
+  declared timestamps remain a product option, not an implemented input.

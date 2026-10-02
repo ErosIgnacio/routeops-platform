@@ -156,7 +156,7 @@ Acceptance criteria:
 
 ## Milestone 3 — operation and analytics
 
-Status: **3.1 accepted; closing publication authorized**, based on published
+Status: **3.1 accepted and published; 3.2 implemented for review**, based on published
 `v0.2.1` (`0241a5168d9f7c02a152cf3614bf502659ea33b3`). One branch,
 `feat/m3-1-operation-analytics`, serves the three parts of 3.1.
 
@@ -180,8 +180,15 @@ and the shared branch. The [3.1c report](milestone-3-1c-diagnostics.md) records
 the implemented diagnostics, five isolated cases and joint backend, HTTP,
 migration, real smoke/demo and frontend validation. Two obsolete downgrade
 expectations were corrected and the affected tests passed. Acceptance on
-2026-10-02 authorizes publishing 3.1c and implementing 3.2 on the single branch
-`feat/m3-2-plan-comparison` after the confirmed 3.1 fast-forward. 3.3 has not started.
+2026-10-02 closed 3.1c/joint 3.1 at `0f95fcf507ea219345836cbaeca26e86c1787bd4`,
+verified in `main` and `feat/m3-1-operation-analytics` locally and on origin.
+The single branch `feat/m3-2-plan-comparison` contains the uncommitted 3.2 candidate.
+See [the comparison contract, reproduction and evidence](milestone-3-2-plan-comparison.md).
+Manual fixed-sequence evaluation, frozen availability, unchanged assignment
+policies, central KPIs/deltas and immutable leased jobs are implemented by API.
+No analytical job creates operational reservations. Historical operational-run
+baselines, declared times and common-served subplan comparisons are not implemented.
+3.3 interface, exports and integrated acceptance have not started.
 `v0.3.0` is reserved for acceptance of the whole milestone. Existing import and
 solver limits and the OSRM extract remain unchanged. B2B/B2C labels add no
 implicit constraints or integration services.

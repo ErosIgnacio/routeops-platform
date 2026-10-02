@@ -201,6 +201,25 @@ not a list of files that still need to be created. In 3.1a a read-only
 The exact OpenAPI schemas are implemented incrementally with each vertical
 slice; this list defines resource boundaries, not a frozen HTTP contract.
 
+## Delivery 3.2 analytical comparison boundary
+
+`PlanComparisonService` captures a published revision, normalized input, rates,
+versions, hashes and current availability under the scenario lock. It reads
+RouteOps holds/confirmations without activating inventory or creating reservations.
+Each alternative receives the same immutable initial availability. Read sessions
+close before external calls; no inventory lock spans OSRM/VROOM work.
+
+The manual evaluator uses `FixedRouteGateway` and OSRM's ordered `route` service,
+not `trip`, to simulate the supplied sequence without repair. Optimization uses
+only `SolverGateway`. Both reuse the central business cost/KPI catalog; policies
+and optimized-response reconciliation remain shared with operational planning.
+
+The separate `comparison-worker` claims PostgreSQL jobs with leases, heartbeat
+and owner fencing. Context/input/events/results are immutable, and final result
+plus READY event commit atomically. Operational run/reservation transitions are
+not called. The API, migration and limits are in the
+[3.2 report](milestone-3-2-plan-comparison.md). The interface remains 3.3 scope.
+
 ## Reliability and security boundaries
 
 - File names are display metadata only. Server-generated IDs determine storage

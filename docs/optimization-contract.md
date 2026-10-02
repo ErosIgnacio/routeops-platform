@@ -243,6 +243,29 @@ Missing historical inputs and unobserved attempt ends are unavailable, never
 manufactured from current fixtures or lease expiry. The existing result and
 `kpis` contracts remain unchanged. See [formulas and examples](milestone-3-1b-metrics.md).
 
+## 3.2 analytical/manual contract (candidate)
+
+The additive comparison API accepts vehicle/CD/ordered order IDs and preserves
+the exact sequence, including infeasible input and its violations. It captures
+one published revision and current availability, rates, parameters, versions
+and hashes; retries and all alternatives use that frozen context. Historical
+run IDs and user-declared timestamps are not accepted in this version.
+
+Manual routes use ordered OSRM legs in integer meters/seconds, start at the
+effective vehicle shift start, wait for windows, keep load through service,
+and return to the declared CD. VROOM can choose another departure time; this
+convention is reported, not attributed solely to stop sequence. Manual facts
+are not a solver `OptimizationResult`: their solver objective is null. The
+existing fixed/driving/distance VROOM objective keeps its configured meaning.
+
+Manual checks reuse units/constraints and central KPI/cost functions. Optimized
+alternatives use the unchanged policies and `SolverGateway` with normal result
+reconciliation. No comparison reserves stock or changes operational run state.
+Deltas are candidate minus baseline, with percent divided by baseline (zero or
+unavailable gives null). Complete input scope, feasibility and coverage accompany
+all differences; infeasible or unequal-coverage plans cannot imply savings.
+See [the exact API, chronology and comparability contract](milestone-3-2-plan-comparison.md).
+
 ## 3.1c recorded explanations
 
 The shared application service enriches the reconciled `unassigned.reasons`

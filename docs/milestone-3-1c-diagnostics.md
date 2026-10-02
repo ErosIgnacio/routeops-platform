@@ -1,6 +1,13 @@
 # Entrega 3.1c — diagnósticos y casos B2B/B2C
 
-Estado: **aceptada, junto con el cierre integral de 3.1; publicación autorizada**.
+Estado: **aceptada y publicada, junto con el cierre integral de 3.1**.
+
+Cierre confirmado el 2026-10-02: `0f95fcf507ea219345836cbaeca26e86c1787bd4`,
+autor Eros Moreno <erosignacio.m@gmail.com>, en `main` y
+`feat/m3-1-operation-analytics` locales/remotas, mediante fast-forward sin force.
+Las tres etiquetas anteriores se conservaron. Los apartados de implementación
+y estado Git siguientes son registros históricos previos al cierre; 3.2 se
+implementa posteriormente en su propia rama y [su informe](milestone-3-2-plan-comparison.md).
 Fecha: 2026-10-02. Los bloques de estado Git inferiores conservan la revisión
 previa a esta aceptación, no el estado posterior al commit de cierre.
 Repositorio `C:\Users\erosi\Desktop\routeops-platform`, rama común

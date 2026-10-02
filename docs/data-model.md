@@ -161,3 +161,23 @@ original-demo runs record decimal rate strings in their input metadata; old
 demos lacking that snapshot return `COST_RATES_NOT_RECORDED`. The calculation
 version and SHA-256 of rates and route facts are returned without modifying
 previous runs or reports. Legacy `kpis.estimated_cost` remains the solver proxy.
+
+## 3.2 comparison persistence (candidate)
+
+Alembic `b82d6c4a910f` follows `a71c9e3d602b` and adds four separate tables:
+
+| Table | Identity and guarantees |
+|---|---|
+| `plan_comparisons` | UUID PK; scenario/revision restrictive FKs with belonging check; scenario/client-key unique; immutable request/context JSON, SHA-256 and UTC provenance |
+| `comparison_jobs` | Comparison PK/FK; status/version/attempts, owner/lease pair and retry time; mutable only through guarded transitions/heartbeat |
+| `comparison_events` | UUID PK, comparison FK, unique sequence; immutable chained transitions |
+| `comparison_results` | Comparison PK/FK; one immutable document, context/content hashes, fenced owner/attempt and creation time |
+
+Six triggers and three functions protect history, job transitions and live owner
+result inserts. Deferred checks require latest event and job to agree, with a
+result if and only if READY. Downgrade refuses any comparison history; an empty
+downgrade removes only the new objects and preserves earlier tables/PostGIS.
+No historical data is backfilled. Frozen stock includes separate imported external,
+safety and existing RouteOps reservations; comparison alternatives do not alter
+operational positions or reservation ledgers. See
+[the complete model and migration evidence](milestone-3-2-plan-comparison.md).

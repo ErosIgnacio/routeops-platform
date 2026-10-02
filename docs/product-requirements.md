@@ -15,12 +15,13 @@ inventory, KPI, or scenario rules.
 
 ## Delivery status and B2B/B2C
 
-Milestones 1–2 and `v0.2.1` are accepted. Manual baselines, comparison and
-exports remain pending Milestone 3 scope. 3.1a supplies the business cost
-foundation; published 3.1b supplies the central indicator API. Their detailed
-analytics UI remains 3.3 scope.
+Milestones 1–2 and `v0.2.1` are accepted. Joint 3.1 is accepted and published.
+The [3.2 candidate](milestone-3-2-plan-comparison.md) implements manual baselines
+and controlled policy comparison by API, pending review. Analytics UI and
+exports remain 3.3 scope. 3.1a supplies the business cost foundation and 3.1b
+supplies the central indicator API.
 B2B and B2C share one architecture and explicit input fields. Independent
-synthetic cases are implemented for review in 3.1c; labels activate no implicit rules.
+synthetic cases were accepted in 3.1c; labels activate no implicit rules.
 
 ## Actors
 
@@ -134,7 +135,8 @@ not zero.
 The centralized [3.1b catalog](milestone-3-1b-metrics.md) supplies units,
 denominators, calculation versions, provenance and missing-data reasons.
 Base distances/times use meters/seconds; kilometer/hour presentation is a
-conversion. Analytics screens/exports remain 3.3, manual deltas remain 3.2.
+conversion. Analytics screens/exports remain 3.3; manual deltas are implemented
+in the 3.2 candidate using the same catalog.
 
 - Total, allocated, routed, and unassigned orders.
 - Assignment rate = routed orders / valid input orders.

@@ -5,13 +5,13 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import date, datetime
-from typing import Any, Protocol
+from typing import Annotated, Any, Protocol
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -26,6 +26,7 @@ from routeops.application.import_contract import DATASETS
 from routeops.application.import_templates import csv_template, xlsx_template
 from routeops.application.import_upload import UploadError, receive_package
 from routeops.application.operating_cost import OperatingCostError
+from routeops.application.plan_comparison import ComparisonError
 from routeops.application.planning import DemoPlanningService
 from routeops.application.revision_problem import RunInputError
 from routeops.domain.optimization import SolutionQuality
@@ -51,6 +52,7 @@ from routeops.infrastructure.persistence.import_validation_jobs import (
 )
 from routeops.infrastructure.persistence.operating_costs import OperatingCostQuery
 from routeops.infrastructure.persistence.operational_allocation import OperationalAllocationService
+from routeops.infrastructure.persistence.plan_comparisons import PlanComparisonService
 from routeops.infrastructure.persistence.plan_metrics import PlanMetricsQuery
 from routeops.infrastructure.persistence.planning_data_repository import ScenarioRepository
 from routeops.infrastructure.persistence.revision_runs import PlanningRunError, RevisionRunService
@@ -124,6 +126,14 @@ revision_planning = RevisionRunService(
 demo_catalog = DemoCatalogService(
     scenario_repository, object_storage, upload_service, validation_service, publication_service
 )
+plan_comparisons = PlanComparisonService(
+    sessions, osrm, vroom, settings.planning_limits,
+    map_dataset_sha256=settings.map_dataset_sha256,
+    timeout_seconds=settings.solver_timeout_seconds,
+    lease_seconds=settings.planning_lease_seconds, max_attempts=settings.planning_max_attempts,
+    max_snap_distance_m=settings.planning_max_snap_distance_m,
+    solver_version=vroom.engine_version, adapter_version=vroom.adapter_version,
+)
 
 
 @asynccontextmanager
@@ -160,6 +170,20 @@ class CreateRevisionRunRequest(BaseModel):
 
     solution_quality: SolutionQuality = SolutionQuality.BALANCED
     allocation_policy: str = "alternatives-v2"
+
+
+class ManualRouteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    vehicle_id: str = Field(min_length=1, max_length=100, strict=True)
+    center_id: str = Field(min_length=1, max_length=100, strict=True)
+    order_ids: list[Annotated[str, Field(strict=True, min_length=1, max_length=100)]] = Field(
+        max_length=20)
+
+
+class CreateComparisonRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    manual_routes: list[ManualRouteRequest] = Field(max_length=6)
+    solution_quality: SolutionQuality = SolutionQuality.BALANCED
 
 
 class RequestValidation(BaseModel):
@@ -202,8 +226,9 @@ def publication_error(_: Request, exc: PublicationError) -> JSONResponse:
 @app.exception_handler(PlanningRunError)
 @app.exception_handler(RunInputError)
 @app.exception_handler(OperatingCostError)
+@app.exception_handler(ComparisonError)
 def revision_run_error(
-    _: Request, exc: PlanningRunError | RunInputError | OperatingCostError,
+    _: Request, exc: PlanningRunError | RunInputError | OperatingCostError | ComparisonError,
 ) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
@@ -480,6 +505,32 @@ def create_revision_run(
 @app.get("/api/v1/scenarios/{scenario_id}/revisions/{revision_no}/runs/lookup", tags=["planning"])
 def lookup_revision_run(scenario_id: UUID, revision_no: int, key: str) -> dict[str, Any]:
     return revision_planning.lookup(scenario_id, revision_no, key)
+
+
+@app.post(
+    "/api/v1/scenarios/{scenario_id}/revisions/{revision_no}/comparisons", tags=["comparisons"]
+)
+def create_comparison(
+    scenario_id: UUID, revision_no: int, body: CreateComparisonRequest,
+    request: Request, response: Response,
+) -> dict[str, Any]:
+    key = request.headers.get("Idempotency-Key")
+    if key is None:
+        raise ComparisonError("COMPARISON_KEY_REQUIRED", 422)
+    result, created = plan_comparisons.submit(scenario_id, revision_no, key,
+        [route.model_dump() for route in body.manual_routes], body.solution_quality)
+    response.status_code = 202 if created else 200
+    return result
+
+
+@app.get("/api/v1/scenarios/{scenario_id}/comparisons", tags=["comparisons"])
+def list_comparisons(scenario_id: UUID, offset: int = 0, limit: int = 20) -> dict[str, Any]:
+    return plan_comparisons.list(scenario_id, offset, limit)
+
+
+@app.get("/api/v1/comparisons/{comparison_id}", tags=["comparisons"])
+def get_comparison(comparison_id: UUID) -> dict[str, Any]:
+    return plan_comparisons.get(comparison_id)
 
 
 @app.get("/api/v1/scenarios/{scenario_id}/revision-runs", tags=["planning"])
