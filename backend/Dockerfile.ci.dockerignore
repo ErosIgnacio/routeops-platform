@@ -1,0 +1,19 @@
+# Dockerfile-specific allowlist: tests required; private imports never included.
+**
+!requirements.lock.txt
+!requirements-dev.lock.txt
+!pyproject.toml
+!alembic.ini
+!src/
+!src/**
+!migrations/
+!migrations/**
+!tests/
+!tests/**
+!data/
+!data/**
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache

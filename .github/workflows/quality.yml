@@ -40,13 +40,14 @@ jobs:
           cd backend
           pytest -m 'not integration' --junitxml=../.ci-artifacts/unit.xml --cov=routeops --cov-report=xml:../.ci-artifacts/coverage.xml
           python ../scripts/ci/check_junit.py ../.ci-artifacts/unit.xml
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
           name: backend-${{ github.sha }}
           path: .ci-artifacts/*.xml
           retention-days: 14
-          if-no-files-found: warn
+          if-no-files-found: error
+          include-hidden-files: true # Only the explicit report patterns above.
   frontend:
     name: Frontend tests, types and build
     runs-on: ubuntu-24.04
@@ -67,13 +68,14 @@ jobs:
       - run: python3 scripts/ci/check_junit.py .ci-artifacts/frontend.xml
       - run: npx tsc --noEmit && npm run build
         working-directory: frontend
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
           name: frontend-${{ github.sha }}
           path: .ci-artifacts/*.xml
           retention-days: 14
-          if-no-files-found: warn
+          if-no-files-found: error
+          include-hidden-files: true # No .env or private sources match this path.
   integration:
     name: PostGIS migrations, real routing and Compose smoke
     needs: [backend, frontend]
@@ -87,7 +89,7 @@ jobs:
         with:
           python-version: '3.14.7'
       - run: bash scripts/ci/integration.sh
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
           name: integration-${{ github.sha }}
@@ -95,4 +97,5 @@ jobs:
             .ci-artifacts/*.xml
             .ci-artifacts/*.txt
           retention-days: 14
-          if-no-files-found: warn
+          if-no-files-found: error
+          include-hidden-files: true # Restricted to sanitized XML/TXT reports.

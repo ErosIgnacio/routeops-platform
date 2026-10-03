@@ -78,6 +78,10 @@ usa directorios de trabajo locales compartidos, aunque los proyectos tengan UUID
 Artefactos durante 14 días: JUnit unitario/frontend/integración, cobertura
 unitaria, logs Compose saneados, servicios y smoke. No se suben .env, fuentes
 originales de importación, volúmenes, índices OSRM ni todo el árbol de trabajo.
+La carpeta de informes es oculta: `include-hidden-files` se habilita únicamente
+con patrones explícitos XML/TXT revisados, nunca para todo el checkout.
+La imagen de comprobación tiene su propio allowlist Dockerfile.ci.dockerignore;
+incluye las pruebas y excluye originales privados y cachés del contexto de build.
 Los pasos estáticos, instalaciones y contratos CI también quedan en el log del
 trabajo. Las excepciones reproducidas usan únicamente datos sintéticos.
 
@@ -112,6 +116,14 @@ contrastó su AST antes/después con UTF-8 explícito, sin cambios ejecutables.
 No hay migración nueva, cambio de política de asignación ni contrato del solver.
 Los resultados finales de integración, frontend y smoke para el commit entregado
 se consultan en la ejecución real y sus JUnit, sin sustituirlos por los del Hito 3.
+
+Primera ejecución real: [37148771237](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37148771237),
+commit `d341514b65d864d0bd6d19e986a196d833e7d9d9`. Backend y frontend aprobados;
+integración falló antes de ejecutar pruebas porque el .dockerignore de producción
+excluía tests. No se presenta como integración aprobada. La corrección agrega
+un contexto específico de comprobación. También se corrigió la exclusión de
+informes ocultos en upload-artifact y se fijó v6/Node24 por SHA, conforme a su
+documentación. El trap retiró sus nueve servicios, red y dos volúmenes efímeros.
 
 En Linux, desde checkout limpio, con Docker/Compose, Python, Bash, curl y jq:
 
@@ -149,7 +161,7 @@ fallos ni se modifican expectativas de pruebas para lograr una ejecución verde.
 Fuentes revisadas: [checkout v6](https://github.com/actions/checkout/blob/v6/README.md),
 [setup-python v6](https://github.com/actions/setup-python/blob/v6/README.md),
 [setup-node v6](https://github.com/actions/setup-node/blob/v6/README.md),
-[upload-artifact v4](https://github.com/actions/upload-artifact/blob/v4/README.md),
+[upload-artifact v6](https://github.com/actions/upload-artifact/blob/v6/README.md),
 [permisos y fijación de acciones](https://docs.github.com/en/actions/reference/security/secure-use),
 [merge/override Compose](https://docs.docker.com/reference/compose-file/merge/).
 Las actualizaciones futuras deben revisar release/notas/capacidades y sustituir
