@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
 vi.mock("./planning-api", () => api);
 vi.mock("./RouteMap", () => ({ RouteMap: () => <div data-testid="planning-map" /> }));
 vi.mock("./RouteSequence", () => ({ RouteSequence: () => <div data-testid="planning-sequence" /> }));
+vi.mock("./AnalyticsPanel", () => ({ AnalyticsPanel: () => <div data-testid="run-analytics" /> }));
 
 import { PlanningWorkspace } from "./PlanningWorkspace";
 import type { RevisionRun } from "./planning-api";

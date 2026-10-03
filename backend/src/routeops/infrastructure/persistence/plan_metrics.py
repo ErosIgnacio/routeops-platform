@@ -1,5 +1,6 @@
 """Read-only metric facts from immutable revision/result/timing records."""
 
+from contextlib import nullcontext
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -30,10 +31,11 @@ class PlanMetricsQuery:
         self.sessions = sessions
         self.costs = OperatingCostQuery(sessions)
 
-    def get(self, run_id: UUID) -> dict[str, Any]:
+    def get(self, run_id: UUID, *, snapshot: Session | None = None) -> dict[str, Any]:
         # One repeatable snapshot prevents a simultaneous completion from mixing states.
-        with self.sessions() as session:
-            session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+        with (nullcontext(snapshot) if snapshot is not None else self.sessions()) as session:
+            if snapshot is None:
+                session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
             run = session.get(PlanningRunModel, run_id)
             if run is None:
                 raise OperatingCostError("RUN_NOT_FOUND", 404)

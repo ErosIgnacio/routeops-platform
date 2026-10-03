@@ -40,6 +40,7 @@ from routeops.infrastructure.persistence import (
     create_database_engine,
     create_session_factory,
 )
+from routeops.infrastructure.persistence.analytics_exports import AnalyticsExports
 from routeops.infrastructure.persistence.diagnostics import DiagnosticQuery
 from routeops.infrastructure.persistence.import_publication import (
     ImportPublicationService,
@@ -134,6 +135,7 @@ plan_comparisons = PlanComparisonService(
     max_snap_distance_m=settings.planning_max_snap_distance_m,
     solver_version=vroom.engine_version, adapter_version=vroom.adapter_version,
 )
+analytics_exports = AnalyticsExports(sessions, plan_comparisons)
 
 
 @asynccontextmanager
@@ -531,6 +533,35 @@ def list_comparisons(scenario_id: UUID, offset: int = 0, limit: int = 20) -> dic
 @app.get("/api/v1/comparisons/{comparison_id}", tags=["comparisons"])
 def get_comparison(comparison_id: UUID) -> dict[str, Any]:
     return plan_comparisons.get(comparison_id)
+
+
+@app.get(
+    "/api/v1/scenarios/{scenario_id}/revisions/{revision_no}/comparison-input", tags=["comparisons"]
+)
+def comparison_input(scenario_id: UUID, revision_no: int) -> dict[str, Any]:
+    return plan_comparisons.input_options(scenario_id, revision_no)
+
+
+@app.get("/api/v1/runs/{run_id}/analytics", tags=["analytics"])
+def run_analytics(run_id: UUID) -> dict[str, Any]:
+    return analytics_exports.run_document(run_id)
+
+
+def export_response(resource: str, identity: UUID, format_name: str) -> Response:
+    payload, media, filename = analytics_exports.export(resource, identity, format_name)
+    return Response(payload, media_type=media, headers={
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"})
+
+
+@app.get("/api/v1/runs/{run_id}/exports/{format_name}", tags=["analytics"])
+def export_run(run_id: UUID, format_name: str) -> Response:
+    return export_response("run", run_id, format_name)
+
+
+@app.get("/api/v1/comparisons/{comparison_id}/exports/{format_name}", tags=["analytics"])
+def export_comparison(comparison_id: UUID, format_name: str) -> Response:
+    return export_response("comparison", comparison_id, format_name)
 
 
 @app.get("/api/v1/scenarios/{scenario_id}/revision-runs", tags=["planning"])

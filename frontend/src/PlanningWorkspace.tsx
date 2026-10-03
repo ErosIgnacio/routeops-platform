@@ -31,6 +31,7 @@ import {
 import { RouteMap } from "./RouteMap";
 import { RouteSequence } from "./RouteSequence";
 import { routeColorForVehicle } from "./map-data";
+import { AnalyticsPanel } from "./AnalyticsPanel";
 
 const STORAGE_KEY = "routeops.planning.v1";
 type Draft = { scenarioId: string; revisionNo: number; key: string; runId: string };
@@ -215,6 +216,8 @@ export function PlanningWorkspace() {
       <Stack direction="row" spacing={1}>
         <Button href="/">Tablero original</Button>
         <Button href="/imports">Importaciones</Button>
+        <Button href="/analytics">Analítica</Button>
+        <Button href="/comparisons">Comparaciones</Button>
       </Stack>
     </Box>
     <Box component="main" className="content">
@@ -310,6 +313,7 @@ export function PlanningWorkspace() {
           {history.map((item) => <Button key={item.run_id} onClick={() => { setRun(item); setDraft((previous) => ({ ...previous, runId: item.run_id, key: "" })); }}>{item.run_id.slice(0, 8)} · {item.status} · {new Date(item.started_at).toLocaleString()}</Button>)}
           {history.length === 0 && <Typography color="text.secondary">Aún no hay corridas.</Typography>}
         </Paper>
+        {run && <AnalyticsPanel runId={run.run_id} status={run.status} selectedVehicleId={selectedVehicleId} onSelectRoute={setSelectedVehicleId} />}
       </Stack>
     </Box>
   </Box>;

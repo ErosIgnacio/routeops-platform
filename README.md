@@ -1,218 +1,231 @@
-# RouteOps Platform
+# RouteOps
 
-RouteOps is a portfolio-grade last-mile planning platform built around a real
-optimization boundary: stock-aware distribution-center allocation, VROOM route
-optimization, OSRM road costs, PostGIS persistence, and a React/MapLibre control
-center. All business data in this repository is synthetic.
+**Inventory-aware delivery planning with traceable decisions and comparable route plans.**
 
-> Status: **Milestones 1 and 2 accepted and published; routing/UI corrections
-> accepted as `v0.2.1`. Delivery 3.1 is accepted, including contracts, costs,
-> KPIs, diagnostics and synthetic B2B/B2C cases, published at `0f95fcf507ea219345836cbaeca26e86c1787bd4`.
-> Delivery 3.2 comparison API is implemented for review, not committed or published.**
->
-> Local Docker Desktop/WSL2 runtime, durable import/planning workers, transactional
-> inventory reservations, real OSRM/VROOM and browser workflows are verified in
-> the historical [2.6 acceptance](docs/milestone-2-6-acceptance.md) and
-> [v0.2.1 correction report](docs/v0.2.1-routing-ui.md).
+RouteOps addresses a dispatch problem: which distribution center can cover an
+entire order, which vehicle can carry it, and what route can serve it within the
+available hours? It combines inventory allocation, transactional reservations
+and road routing, then explains the routes and exclusions. All demonstration
+orders, stock and business identifiers are synthetic.
 
-## Original demonstration and current workspaces
+> **Status:** Milestones 1–3 and the `v0.2.1` corrections are complete and accepted.
+> Milestone 3 (`v0.3.0`), accepted on 2026-10-03, adds constraints, estimated
+> operating costs, KPIs, diagnostics, manual comparisons and exports.
+> [Acceptance and evidence](docs/milestone-3-final-review.md) distinguish browser,
+> API, automated and independent-reader checks. Milestone 4 has not started.
 
-1. Loads a deterministic synthetic Santiago scenario with two distribution
-   centers, inventory, three vehicles, and five fictional orders.
-2. Allocates each complete order to one stock-eligible center using a documented
-   greedy policy: priority, window end, OSRM duration, inventory slack, center ID.
-   Imported revisions use `alternatives-v2` by default; `greedy-v1` remains an
-   explicit comparison policy. Neither claims global optimality.
-3. Sends only the allocated, solver-neutral problem through `SolverGateway` to
-   the VROOM adapter. Center isolation, three-dimensional capacity, time windows,
-   skills, costs, optional vehicle route limits and closed routes are mapped explicitly.
-4. Reconciles every returned job and vehicle, decodes route geometry, persists
-   the run and PostGIS line strings, and exposes KPIs and explained exceptions.
-5. Renders the latest run in a responsive React dashboard with a MapLibre map.
+![Original Santiago demo: two routes from separate centers](docs/images/original-routes.jpg)
 
-One fixture order, `ORD-003`, deliberately lacks full stock coverage, so a
-successful demo should be `PARTIAL`: routable orders plus one proven allocation
-exception. The current map colors are blue `#3338d6` for `VEH-CENTRO-01` and
-red `#eb1010` for `VEH-ORIENTE-01`.
+## Capabilities
 
-The accepted `/imports` workspace supports provisional CSV/XLSX upload,
-recoverable contextual validation and atomic revision publication. `/planning`
-executes immutable revisions with isolated demos, auditable center choices,
-stock reservations, acceptance/cancellation and recoverable history.
+- Import exactly five CSV datasets or one XLSX workbook; validate structure,
+  relationships, daily planning context and optional geographic coverage.
+- Publish immutable revisions with hashes and record provenance. Original files
+  remain private, with no download endpoint.
+- Assign each complete order to one CD. Auditable `alternatives-v2` considers
+  future alternatives; `greedy-v1` remains available. Neither guarantees a global optimum.
+- Reserve stock atomically, accounting separately for external reservations,
+  safety stock and RouteOps reservations. Accept or cancel recoverable runs
+  without losing history.
+- Route with real OSRM/VROOM: capacity, skills, windows, service, shifts, closed
+  routes and optional distance, driving-time and task limits.
+- Inspect sequences, candidates, reservations and diagnostics with explicit
+  `PROVEN`/`INFERRED` certainty and primary/supplementary roles.
+- Compare an exact manual sequence against optimized alternatives using one
+  frozen context. Analytical comparisons do not create operational reservations.
+- Read versioned KPIs, utilization by dimension and processing measurements;
+  download matching CSV tables in a ZIP or XLSX from persisted results.
 
-B2B and B2C share the same explicit contracts. Labels do not activate implicit
-rules. Five reproducible independent cases and persisted diagnostics are available
-in [3.1c, including the joint 3.1 validation](docs/milestone-3-1c-diagnostics.md). See the
-[3.1a contract matrix and cost foundation](docs/milestone-3-1a-contracts-costs.md).
+### B2B and B2C examples
 
-Delivery 3.1b adds [versioned plan KPIs and processing measurements](docs/milestone-3-1b-metrics.md),
-without changing historical plan results. Its acceptance records the explicit pre-commit timing boundary.
+Both models share explicit contracts. Labels activate no hidden business rules:
+capacities, skills, windows and limits come from the dataset.
 
-[Delivery 3.2](docs/milestone-3-2-plan-comparison.md) compares an explicit manual
-sequence with `greedy-v1` and `alternatives-v2` against one frozen context.
-These analytical jobs use no operational reservations. The new Compose
-`comparison-worker` executes them; their interface and exports remain 3.3 scope.
+| Synthetic case | Demonstration |
+|---|---|
+| `b2b-feasible` | Two business deliveries, service time and a viable manual baseline. |
+| `b2b-diagnostics` | Independent stock, fleet, capacity and temporal exclusions. |
+| `b2c-feasible` | Six parcel deliveries, shared coordinates, KPIs and comparison. |
+| `b2c-task-pressure` | Six orders against a two-task limit; individual omission causes remain inferred. |
+| `b2c-distance-inferred` | Tight distance/driving limits without attributing a proven individual cause. |
+
+The original `ORD-003` regression remains: it needs 20 units of `SKU-C`, but each
+CD has only five available after safety stock. `STOCK_NO_FULL_COVERAGE` is intentional.
+
+![B2C comparison: coverage, six deliveries and estimated cost](docs/images/b2c-comparison.jpg)
+
+These are real browser captures of synthetic local scenarios. Extensive evidence
+stays outside the repository. See [final review coverage](docs/milestone-3-final-review.md).
+
+## Architecture and stack
+
+```text
+React + MUI + MapLibre workspaces
+              |
+         FastAPI API
+              |
+application services and domain policies
+       |                         |
+PostgreSQL/PostGIS          SolverGateway → VROOM → OSRM
+revisions, inventory,             road costs and geometry
+history and leased workers
+```
+
+- **Backend:** Python 3.14, FastAPI, SQLAlchemy, Alembic, Decimal business costs.
+- **Persistence:** PostgreSQL 18/PostGIS 3.6; immutable snapshots and evidence,
+  constraints, stable lock ordering and PostgreSQL-coordinated leased work.
+- **Routing:** pinned VROOM **1.15.0**, OSRM **26.9.0**, bounded Santiago OSM extract
+  with checksum metadata. VROOM is used exclusively through `SolverGateway`.
+- **Frontend:** React, TypeScript, Vite, MUI and MapLibre; Node 24 tooling.
+- **Runtime:** Docker Compose, private storage, loopback-bound ports, dependency
+  locks and image digests. Workers handle validation, planning, comparisons and maintenance.
+
+The modular backend separates solver contracts from adapter JSON and persistence.
+An existing revision-preparation module still reads ORM models directly; this
+boundary limitation is recorded in the [architecture](docs/architecture.md).
 
 ## Quick start
 
-Prerequisites: Docker Engine with Compose v2 (Docker Desktop with Linux
-containers on Windows) and PowerShell 7 or a POSIX shell for the map download.
-The PostGIS 18 image used here currently targets `linux/amd64`.
+Prerequisites: Docker Engine with Compose v2; on Windows, Docker Desktop with
+Linux containers and PowerShell 7. The pinned database image targets
+`linux/amd64`. Use a trusted local development machine.
+
+From the repository root:
 
 ```powershell
 Copy-Item .env.example .env
-# Edit .env: set POSTGRES_PASSWORD and ROUTEOPS_DATABASE_URL with the same
-# locally chosen password (URL-encode reserved characters in the URL).
+# Edit .env: choose POSTGRES_PASSWORD and set ROUTEOPS_DATABASE_URL with
+# the same password, URL-encoding reserved characters. The database host
+# inside Compose is database:5432.
 ./infrastructure/osrm/download-osm.ps1
 docker compose --profile tools run --rm osrm-prepare
 docker compose up --build
 ```
 
-Leave both password fields empty in `.env.example`; set them only in the local
-`.env` copy. The database URL must use the same password as PostgreSQL. Compose
-rejects a missing value before starting services. Do not commit `.env`.
+Keep `.env` private and untracked. The template contains no database password;
+Compose rejects missing required values. Downloaded OSM/OSRM artifacts are
+ignored. Review a new download checksum against
+[source-lock.json](data/osrm/source-lock.json) before preprocessing.
 
-The approved map input has already been downloaded in this workspace. It is
-ignored by Git; its reviewed fingerprint is committed in
-[`data/osrm/source-lock.json`](data/osrm/source-lock.json). A fresh clone must
-run the download command and review any checksum change before preprocessing.
+| Workspace | Local URL |
+|---|---|
+| Original dashboard | <http://127.0.0.1:5173/> |
+| Imports | <http://127.0.0.1:5173/imports> |
+| Planning and reservations | <http://127.0.0.1:5173/planning> |
+| KPIs and diagnostics | <http://127.0.0.1:5173/analytics> |
+| Manual comparisons | <http://127.0.0.1:5173/comparisons> |
+| OpenAPI | <http://127.0.0.1:8000/docs> |
+| Readiness | <http://127.0.0.1:8000/health/ready> |
 
-Once the stack is healthy:
-
-- dashboard: <http://localhost:5173>
-- planning workspace: <http://127.0.0.1:5173/planning>
-- import workspace: <http://127.0.0.1:5173/imports>
-- OpenAPI: <http://localhost:8000/docs>
-- liveness: <http://localhost:8000/health/live>
-- readiness: <http://localhost:8000/health/ready>
-- dependency detail: <http://localhost:8000/health/dependencies>
-
-Run the cross-stack acceptance check in another terminal:
+Run the original live-service check in a second terminal:
 
 ```powershell
 ./scripts/smoke.ps1
 ```
 
-Stop services without deleting the PostgreSQL volume:
+Stop with `docker compose down` to retain named volumes and local history.
+Do not add `--volumes` when retaining data.
+
+### Demonstration tour
+
+1. Run optimization on the original dashboard: blue `#3338d6` and red `#eb1010`
+   routes, four deliveries and the deliberate `ORD-003` exception.
+2. In **Imports**, download templates, upload a package, set date, daily horizon,
+   IANA zone and currency, validate, then publish. `VALID` and `PUBLISHED` differ.
+3. In **Planning**, select a revision or prepare an isolated allocation demo:
+   exclusive stock, eligible centers, shared/restricted stock or fleet restrictions.
+   Inspect candidates and `HELD` reservations before accepting (`CONFIRMED`) or
+   canceling (`RELEASED`).
+4. In **Analytics**, read costs, KPIs and diagnoses. Missing historical facts
+   remain explicitly unavailable.
+5. In **Comparisons**, enter vehicle, CD and ordered IDs. Compare both policies
+   and download persisted facts. Departure times and waiting affect deltas;
+   a cheaper incomplete plan is not declared a winner.
+
+Generate a reproducible B2C input outside the repository:
 
 ```powershell
-docker compose down
+docker compose exec backend python -m routeops.infrastructure.data.operation_cases --case b2c-feasible --format xlsx --output /tmp/routeops-b2c-demo
+docker compose cp backend:/tmp/routeops-b2c-demo ../routeops-b2c-demo
 ```
 
-## Milestone 2 imports
+The output directory must be empty; existing files are preserved. Upload the
+workbook with date **2026-10-15**, horizon **08:00–18:00**, zone
+**America/Santiago**, offset **−03:00** and currency **CLP**. The generator also
+supports `--format csv` and every case above. See [case definitions](docs/milestone-3-1c-diagnostics.md)
+for the API preparation alternative.
 
-The 2.1 CLI provides a read-only validator and reproducible CSV/XLSX templates
-for five datasets. With the backend dependencies installed and `PYTHONPATH=backend/src`, run
-`python -m routeops.application.import_cli templates <directory>` or
-`python -m routeops.application.import_cli validate <five CSV paths or one XLSX path>`.
-See [the 2.1 contract and issue catalog](docs/milestone-2-1-import-validation.md).
+## Tests and evidence
 
-Delivery 2.3a adds local-only provisional uploads, private original storage,
-and recoverable retention cleanup. See [the 2.3a API and configuration](docs/milestone-2-3a-private-upload.md).
-The import workspace, its recovery flow and performance measurements are in
-[the 2.3d guide](docs/milestone-2-3d-import-ui.md).
+Final 3.3 records contain **332 backend tests** (213 unit, 119 integration) and
+**36 frontend tests**, plus Ruff, strict mypy, TypeScript, Vite build, Compose
+and migration checks. Integrations use real PostgreSQL/PostGIS and OSRM/VROOM.
+Browser observations and independent export readers are separate in the
+[3.3 report](docs/milestone-3-3-analytics-exports.md). These are local results;
+CI is pending.
 
-## API
-
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/api/v1/demo/runs` | Allocate, optimize, persist, and return a demo run |
-| `GET` | `/api/v1/runs/latest` | Return the newest persisted run |
-| `GET` | `/api/v1/runs/{run_id}` | Return one persisted run |
-| `GET` | `/api/v1/runs/{run_id}/estimated-operating-cost` | Versioned decimal business cost from persisted facts (accepted 3.1a) |
-| `GET` | `/api/v1/runs/{run_id}/metrics` | Plan KPIs, units/denominators/provenance, durable attempts and phase times (3.1b) |
-| `GET` | `/api/v1/runs/{run_id}/diagnostics` | Persisted explanations, certainty, scope and provenance; paginated filters (3.1c) |
-| `GET` | `/api/v1/scenarios/{scenario_id}/imports/{batch_id}/diagnostics` | Input incidences kept separate from run exclusions (3.1c) |
-| `GET` | `/api/v1/operation-cases` | Reproducible B2B/B2C case names (3.1c) |
-| `POST` | `/api/v1/operation-cases/{name}/prepare` | Import, validate and publish into a new isolated scenario (3.1c) |
-| `POST` | `/api/v1/scenarios/{scenario_id}/revisions/{revision_no}/comparisons` | Queue an idempotent analytical comparison (3.2 candidate) |
-| `GET` | `/api/v1/comparisons/{comparison_id}` | Frozen context, manual input, job state, result and history |
-| `GET` | `/api/v1/scenarios/{scenario_id}/comparisons` | Paginated comparison history |
-| `GET` | `/health/live` | Process liveness only |
-| `GET` | `/health/ready` | Aggregate database/VROOM/OSRM readiness |
-| `GET` | `/health/dependencies` | Per-dependency diagnostic status |
-
-Example request:
-
-```bash
-curl -X POST http://localhost:8000/api/v1/demo/runs \
-  -H 'Content-Type: application/json' \
-  -d '{"solution_quality":"BALANCED"}'
-```
-
-## Tests and quality checks
-
-With a local Python 3.14 environment:
+For unit/static checks with Python 3.14 and Node 24:
 
 ```bash
 cd backend
 python -m pip install -r requirements-dev.lock.txt
 ruff check src tests
 mypy src
-pytest --cov
+pytest -m "not integration"
 ```
-
-With Node 24:
 
 ```bash
 cd frontend
-npm install
-npm test
+npm ci --ignore-scripts
+npm test -- --run
+npx tsc --noEmit
 npm run build
 ```
 
-Direct dependency versions are exact; resolved Python lock files and
-`package-lock.json` fix both dependency graphs. Containers use the resolved
-Python lock and `npm ci`, so drift is visible instead of silently accepted.
+For integration configuration, migrations and live-service checks, follow the
+[integrated acceptance runbook](docs/milestone-2-6-acceptance.md) and 3.3 report.
+Host execution uses loopback service addresses; Compose uses service names.
 
-## Architecture
+## Documentation
 
-```text
-frontend (React + MUI + MapLibre)
-        |
-FastAPI HTTP API
-        |
-application services ---- RunRepository ---- PostgreSQL/PostGIS
-        |
-domain policy + solver-neutral contracts
-        |
-SolverGateway / VroomAdapter ---- VROOM ---- OSRM
-             allocation travel times ---------^
-```
+| Topic | Document |
+|---|---|
+| Product, architecture and data | [Requirements](docs/product-requirements.md), [architecture](docs/architecture.md), [data model](docs/data-model.md) |
+| Imports and solver contracts | [Data contracts](docs/data-contracts.md), [optimization contract](docs/optimization-contract.md) |
+| Constraints and cost mapping | [3.1a](docs/milestone-3-1a-contracts-costs.md) |
+| KPIs and processing-time boundaries | [3.1b](docs/milestone-3-1b-metrics.md) |
+| Diagnostic certainty and fixtures | [3.1c](docs/milestone-3-1c-diagnostics.md) |
+| Manual baseline and frozen context | [3.2](docs/milestone-3-2-plan-comparison.md) |
+| Analytics, UI and safe exports | [3.3](docs/milestone-3-3-analytics-exports.md) |
+| Final coverage and acceptance | [Hito 3 acceptance](docs/milestone-3-final-review.md) |
+| Previous published acceptance | [Hito 2](docs/milestone-2-6-acceptance.md), [v0.2.1](docs/v0.2.1-routing-ui.md) |
+| Remaining work | [Roadmap](docs/roadmap.md) |
 
-The backend follows a modular-monolith/hexagonal boundary. Domain models do not import VROOM JSON or SQLAlchemy models. Solver calls use
-neutral DTOs. The current revision-preparation application module reads ORM
-models directly; this existing boundary limitation is documented in the design:
+## Current limits and Milestone 4
 
-- [Product requirements](docs/product-requirements.md)
-- [Architecture](docs/architecture.md)
-- [Data model and inventory consistency](docs/data-model.md)
-- [CSV/XLSX data contracts](docs/data-contracts.md)
-- [Optimization contracts](docs/optimization-contract.md)
-- [VROOM/OSRM assessment](docs/research/toolchain-versions.md)
-- [Accepted v0.2.1 routing and UI correction](docs/v0.2.1-routing-ui.md)
-- [Milestone 1 runtime validation](docs/research/milestone-1-validation.md)
-- [ADR-0001: VROOM and OSRM](docs/adr/0001-vroom-osrm.md)
-- [ADR-0002: approved product decisions](docs/adr/0002-approved-product-decisions.md)
-- [Roadmap](docs/roadmap.md)
+- Trusted local use only: authentication and production deployment are pending;
+  no external upload access is enabled.
+- Results are estimated plans, not executed deliveries or realized savings.
+  Decimal operating cost and VROOM's integer objective have different scopes.
+- A whole order comes from one CD; there is no global-optimum guarantee.
+  All vehicle types currently use one OSRM `car` profile.
+- Defaults: 20 orders, 60 lines, six vehicles, 80 CD–order allocation cells and
+  1,024 routing matrix cells. Workload checks precede reservations. These are
+  separate from import limits; local samples establish no maximum throughput.
+- Durable commit acknowledgment may be unknown. Missing intervals and historical
+  departure metadata are not invented.
+- CSV readers must preserve identifiers as text; XLSX stores inert text cells.
+  Independent readers were checked, not native Excel or every browser/device.
+- Frontend bundle and Starlette/httpx warnings remain documented.
 
-## Data, licensing, and responsible use
+**Milestone 4 has not started:** CI, further test/benchmark and resource hardening,
+runbooks, backup/reset guidance and publication preparation remain pending.
+No separate RouteEngine is introduced in this delivery.
 
-- Code is licensed under [Apache-2.0](LICENSE).
-- VROOM/vroom-express/OSRM and MapLibre notices are in
-  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-- Routing data and dashboard tiles require `© OpenStreetMap contributors` and
-  are subject to the ODbL/tile usage terms described in that notice.
-- The public OSM raster tile endpoint is suitable only for low-volume local
-  demonstration, not production traffic.
-- No real customer addresses, orders, company inventory, or confidential data
-  belong in this repository.
+## License and map attribution
 
-## Approved v1 decisions
-
-- Apache-2.0 repository license.
-- Small bounded Santiago OSM extract with source, bbox, timestamp, and SHA-256.
-- Closed routes returning to their originating distribution center.
-- Manual baseline evaluation in 3.2 accepts vehicle/CD/ordered order IDs;
-  RouteOps recomputes route facts with the same pinned OSRM dataset. Optional
-  declared timestamps remain a product option, not an implemented input.
+Code: [Apache-2.0](LICENSE). Dependency and map terms:
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Maps retain
+`© OpenStreetMap contributors`; OSM data is subject to ODbL. Public raster tiles
+serve low-volume local demonstrations, not production traffic. Do not add real
+customer addresses, credentials or business inventory to this repository.

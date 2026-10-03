@@ -1,8 +1,10 @@
 # Entrega 3.2 — comparación manual y de políticas
 
-Estado: **aceptada para cierre tras comprobación temporal dirigida**. 2026-10-02.
+Estado: **aceptada y publicada tras comprobación temporal dirigida**. 2026-10-02.
 Repositorio `C:\Users\erosi\Desktop\routeops-platform`, rama única
-`feat/m3-2-plan-comparison`. No se inició 3.3 ni se crearon etiquetas.
+`feat/m3-2-plan-comparison`. Cierre `1fc356881b5bfa899399beafe3952da4f112f498`.
+Los apartados de estado Git siguientes conservan el registro previo al cierre;
+el estado publicado se confirma al final. No se crearon etiquetas.
 
 ## Cierre publicado de 3.1
 
@@ -438,7 +440,7 @@ La aplicación local y comparison-worker quedan levantados para revisión por AP
 3.2 permanece sin preparar, commit ni push; main/origin y la rama3.1 conservan
 el cierre0f95fcf… y las etiquetas no cambian.
 
-## Revisión final y estado Git
+## Revisión final y estado Git (registro previo al cierre)
 
 Raíz confirmada: `C:\Users\erosi\Desktop\routeops-platform`.
 HEAD/main/origin/main y rama 3.1: `0f95fcf507ea219345836cbaeca26e86c1787bd4`.
@@ -479,3 +481,14 @@ HTTP200; la muestra compartida 8fcce98a-801d-45da-bf32-91b86738233a sigue READY.
 La migración está aplicada en la base local de desarrollo para esta revisión,
 aunque el código 3.2 permanezca sin commit. Los nueve escenarios de prueba
 analítica se conservan, junto a todos los datos históricos anteriores.
+
+## Cierre confirmado
+
+El commit único `1fc356881b5bfa899399beafe3952da4f112f498`,
+`feat: add frozen manual and policy plan comparisons`, usa autoría Eros Moreno
+<erosignacio.m@gmail.com>. Se revisaron y prepararon los 21 archivos, incluidos
+los nuevos; `git diff --cached --check` aprobó. Tras fetch y comprobación de
+origin/main en `0f95fcf507ea219345836cbaeca26e86c1787bd4`, se publicó la rama,
+se integró por fast-forward y se publicó main. `git ls-remote` verificó ambas
+referencias en el commit final. Se conservaron ramas y etiquetas anteriores.
+3.3 continúa desde este commit en `feat/m3-3-analytics-exports`.

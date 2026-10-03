@@ -410,6 +410,8 @@ export function ImportWorkspace() {
         <Stack direction="row" spacing={1}>
           <Button href="/">Tablero demo</Button>
           <Button href="/planning">Planificación</Button>
+          <Button href="/analytics">Analítica</Button>
+          <Button href="/comparisons">Comparaciones</Button>
           <Chip label="Acceso local" size="small" color="primary" variant="outlined" />
         </Stack>
       </Box>

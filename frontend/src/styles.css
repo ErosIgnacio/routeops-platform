@@ -214,6 +214,7 @@ body {
 .import-card {
   padding: 22px;
   min-width: 0;
+  overflow-wrap: anywhere;
   background: rgba(14, 28, 45, 0.94) !important;
 }
 .context-grid {
@@ -227,6 +228,8 @@ body {
   gap: 8px;
 }
 .count-cell, .revision-detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 12px;
   border: 1px solid rgba(148, 169, 194, 0.15);
   border-radius: 9px;
@@ -250,8 +253,8 @@ body {
 }
 
 @media (max-width: 680px) {
-  .topbar { padding: 0 18px; }
-  .topbar .MuiStack-root:last-child { display: none; }
+  .topbar { padding: 14px 18px; height: auto; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .topbar .MuiStack-root:last-child { display: flex; flex-wrap: wrap; }
   .content { width: min(92vw, 560px); padding-top: 28px; }
   .headline { align-items: flex-start; flex-direction: column; }
   .headline .MuiStack-root { align-items: flex-start; }
@@ -262,3 +265,11 @@ body {
   .context-grid { grid-template-columns: 1fr; }
   .import-card { padding: 16px; }
 }
+
+.analytics-table { overflow-x: auto; max-width: 100%; }
+.analytics-table table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.analytics-table th, .analytics-table td { text-align: left; padding: 9px; border-bottom: 1px solid #29415a; vertical-align: top; }
+.analytics-table th { white-space: nowrap; }
+.audit-details { margin: 8px 0; font-size: 13px; overflow-wrap: anywhere; }
+.audit-details summary { cursor: pointer; color: #91a4ba; }
+.audit-details pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; }

@@ -340,6 +340,33 @@ class PlanComparisonService:
                 ],
             }
 
+    def input_options(self, scenario_id: UUID, revision_no: int) -> dict[str, Any]:
+        with self.sessions() as session:
+            revision = session.scalar(
+                select(ScenarioRevisionModel).where(
+                    ScenarioRevisionModel.scenario_id == scenario_id,
+                    ScenarioRevisionModel.revision_no == revision_no,
+                )
+            )
+            if revision is None:
+                raise ComparisonError("REVISION_NOT_FOUND", 404)
+            check_revision_size(session, revision.id, self.limits)
+            prepared = _prepared(session, revision.id)
+            return {
+                "revision_id": str(revision.id),
+                "timezone": prepared.timezone,
+                "vehicles": [
+                    {
+                        "vehicle_id": v.source_vehicle_id,
+                        "center_id": v.distribution_center_id,
+                        "shift_start": v.shift_start.isoformat(),
+                    }
+                    for v in prepared.vehicles
+                ],
+                "orders": [o.id for o in prepared.orders],
+                "centers": [c.id for c in prepared.centers],
+            }
+
     def list(self, scenario_id: UUID, offset: int = 0, limit: int = 20) -> dict[str, Any]:
         if offset < 0 or not 1 <= limit <= 100:
             raise ComparisonError("PAGINATION_INVALID", 422)

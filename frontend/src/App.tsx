@@ -19,6 +19,8 @@ import { createDemoRun, getLatestRun } from "./api";
 import { formatEstimatedCost } from "./formatters";
 import { ImportWorkspace } from "./ImportWorkspace";
 import { PlanningWorkspace } from "./PlanningWorkspace";
+import { AnalyticsWorkspace } from "./AnalyticsWorkspace";
+import { ComparisonWorkspace } from "./ComparisonWorkspace";
 import { routeColorForVehicle } from "./map-data";
 import { RouteMap } from "./RouteMap";
 import { RouteSequence } from "./RouteSequence";
@@ -72,18 +74,20 @@ function KpiCard({ label, value, note }: { label: string; value: string; note: s
 export default function App() {
   const importPage = window.location.pathname === "/imports";
   const planningPage = window.location.pathname === "/planning";
+  const analyticsPage = window.location.pathname === "/analytics";
+  const comparisonsPage = window.location.pathname === "/comparisons";
   const [run, setRun] = useState<PlanningRun | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (importPage || planningPage) { setBusy(false); return; }
+    if (importPage || planningPage || analyticsPage || comparisonsPage) { setBusy(false); return; }
     getLatestRun()
       .then(setRun)
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setBusy(false));
-  }, [importPage, planningPage]);
+  }, [importPage, planningPage, analyticsPage, comparisonsPage]);
 
   const execute = async () => {
     setBusy(true);
@@ -127,6 +131,8 @@ export default function App() {
   if (planningPage) {
     return <ThemeProvider theme={theme}><CssBaseline /><PlanningWorkspace /></ThemeProvider>;
   }
+  if (analyticsPage) return <ThemeProvider theme={theme}><CssBaseline /><AnalyticsWorkspace /></ThemeProvider>;
+  if (comparisonsPage) return <ThemeProvider theme={theme}><CssBaseline /><ComparisonWorkspace /></ThemeProvider>;
 
   return (
     <ThemeProvider theme={theme}>
@@ -147,6 +153,8 @@ export default function App() {
           <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
             <Button href="/imports" size="small">Importaciones</Button>
             <Button href="/planning" size="small">Planificación</Button>
+            <Button href="/analytics" size="small">Analítica</Button>
+            <Button href="/comparisons" size="small">Comparaciones</Button>
             <Chip size="small" label="SYNTHETIC DATA" color="primary" variant="outlined" />
             <Chip size="small" label="SANTIAGO · CL" variant="outlined" />
           </Stack>
@@ -223,13 +231,13 @@ export default function App() {
               note="VROOM solve duration"
             />
             <KpiCard
-              label="Estimated cost"
+              label="VROOM objective proxy"
               value={
                 kpis
                   ? formatEstimatedCost(kpis.estimated_cost, kpis.currency)
                   : "—"
               }
-              note="Vehicle cost model"
+              note="Fixed + driving + distance; full operating cost in Analytics"
             />
           </Box>
 

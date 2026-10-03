@@ -5,8 +5,9 @@
 This document retains the initial logical boundaries and illustrative layout.
 Milestone 2 and v0.2.1 implement private uploads (`ObjectStorageGateway`),
 PostgreSQL validation/planning jobs with leases, immutable revisions, operating
-stock/reservations and `/imports` and `/planning`. Baselines, comparison, the
-full indicator catalog and exports remain Milestone 3 work, not current APIs.
+stock/reservations and `/imports` and `/planning`. Accepted Milestone 3 adds
+fixed-sequence manual baselines, comparison, the versioned indicator catalog,
+diagnostics, `/analytics`, `/comparisons` and read-only CSV/XLSX exports.
 B2B/B2C use the same modules and explicit fields; no business-label dispatch.
 
 ## Architectural style
@@ -218,7 +219,11 @@ The separate `comparison-worker` claims PostgreSQL jobs with leases, heartbeat
 and owner fencing. Context/input/events/results are immutable, and final result
 plus READY event commit atomically. Operational run/reservation transitions are
 not called. The API, migration and limits are in the
-[3.2 report](milestone-3-2-plan-comparison.md). The interface remains 3.3 scope.
+[3.2 report](milestone-3-2-plan-comparison.md). The [3.3 interface and exports](milestone-3-3-analytics-exports.md)
+reuse these frozen results and the central metrics/diagnostic queries. Run export
+and combined analytics use one PostgreSQL REPEATABLE READ snapshot so concurrent
+review cannot mix a READY result with a later reservation state. The serializer
+reads this document only; it performs no routing, repricing or inventory writes.
 
 ## Reliability and security boundaries
 

@@ -1,5 +1,6 @@
 """Persist canonical explanations once; queries never inspect live inventory."""
 
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -48,6 +49,7 @@ class DiagnosticQuery:
         stage: str | None = None,
         code: str | None = None,
         certainty: str | None = None,
+        snapshot: Session | None = None,
     ) -> dict[str, Any]:
         if offset < 0 or not 1 <= limit <= 200:
             raise OperatingCostError("PAGINATION_INVALID", 422)
@@ -57,8 +59,9 @@ class DiagnosticQuery:
             "INFERRED",
         ):
             raise OperatingCostError("DIAGNOSTIC_FILTER_INVALID", 422)
-        with self.sessions() as session:
-            session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+        with (nullcontext(snapshot) if snapshot is not None else self.sessions()) as session:
+            if snapshot is None:
+                session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
             run = session.get(PlanningRunModel, run_id)
             if run is None:
                 raise OperatingCostError("RUN_NOT_FOUND", 404)

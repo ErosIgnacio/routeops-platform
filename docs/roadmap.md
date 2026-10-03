@@ -156,9 +156,10 @@ Acceptance criteria:
 
 ## Milestone 3 — operation and analytics
 
-Status: **3.1 accepted and published; 3.2 implemented for review**, based on published
-`v0.2.1` (`0241a5168d9f7c02a152cf3614bf502659ea33b3`). One branch,
-`feat/m3-1-operation-analytics`, serves the three parts of 3.1.
+Status: **complete and accepted on 2026-10-03; release `v0.3.0`**, based on
+published `v0.2.1` (`0241a5168d9f7c02a152cf3614bf502659ea33b3`). The shared branch
+`feat/m3-1-operation-analytics` served the three parts of 3.1; the three milestone
+branches are retired after their integration and release are verified.
 
 Approved sequence:
 
@@ -182,14 +183,31 @@ migration, real smoke/demo and frontend validation. Two obsolete downgrade
 expectations were corrected and the affected tests passed. Acceptance on
 2026-10-02 closed 3.1c/joint 3.1 at `0f95fcf507ea219345836cbaeca26e86c1787bd4`,
 verified in `main` and `feat/m3-1-operation-analytics` locally and on origin.
-The single branch `feat/m3-2-plan-comparison` contains the uncommitted 3.2 candidate.
+Delivery 3.2 closed at `1fc356881b5bfa899399beafe3952da4f112f498`, verified in
+local/remote `main` and `feat/m3-2-plan-comparison`, after directed departure-condition checks.
 See [the comparison contract, reproduction and evidence](milestone-3-2-plan-comparison.md).
 Manual fixed-sequence evaluation, frozen availability, unchanged assignment
 policies, central KPIs/deltas and immutable leased jobs are implemented by API.
 No analytical job creates operational reservations. Historical operational-run
 baselines, declared times and common-served subplan comparisons are not implemented.
-3.3 interface, exports and integrated acceptance have not started.
-`v0.3.0` is reserved for acceptance of the whole milestone. Existing import and
+Delivery 3.3 completes operation analytics, the exact manual editor, comparison history/maps,
+CSV/XLSX exports and integrated acceptance. See [3.3 evidence and remaining
+limitations](milestone-3-3-analytics-exports.md). Backend 332 and frontend 36
+tests passed, including real HTTP/PostGIS/OSRM/VROOM flows and export consistency.
+Desktop/mobile and real downloads were reviewed in the integrated browser;
+captures remain outside the repository. The user accepted the whole milestone
+and authorized its release; no Hito 4 work has started.
+The [final review matrix](milestone-3-final-review.md) separates model-specific
+B2B/B2C browser/API observations from shared automated checks. Additional isolated
+B2C import, acceptance, cancellation, comparison and export evidence closes the
+relevant review gaps. The README includes two selected synthetic captures;
+extensive reports and evidence remain external. The final folder and ZIP contain
+128 matching files, including 45 readable captures; approved functional files
+remain unchanged. The user manually removed the provisional folder after the
+recorded policy rejection; its absence was verified without retrying deletion.
+The two disposable check containers were already removed, with their reports
+preserved. Nine operational services and both persistent volumes remain intact.
+`v0.3.0` identifies the accepted whole milestone. Existing import and
 solver limits and the OSRM extract remain unchanged. B2B/B2C labels add no
 implicit constraints or integration services.
 

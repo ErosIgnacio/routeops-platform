@@ -10,6 +10,12 @@ export type RouteStep = {
   location: Coordinate;
   arrival_at: string;
   time_window_status: string;
+  service_start_at?: string;
+  departure_at?: string;
+  travel_seconds_from_previous?: number;
+  waiting_seconds?: number;
+  service_seconds?: number;
+  load_after?: {units: number; weight_grams: number; volume_cm3: number};
 };
 
 export type OptimizedRoute = {
@@ -18,13 +24,14 @@ export type OptimizedRoute = {
   distribution_center_id: string;
   steps: RouteStep[];
   geometry: Coordinate[];
+  departure_condition?: {policy: string; departure_at: string; scope: string};
   totals: {
     distance_meters: number;
     driving_seconds: number;
     service_seconds: number;
     waiting_seconds: number;
     total_duration_seconds: number;
-    objective_cost_units: number;
+    objective_cost_units?: number;
   };
 };
 
