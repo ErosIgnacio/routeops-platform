@@ -28,6 +28,8 @@ services:
       ROUTEOPS_OSRM_URL: http://osrm:5000
   frontend:
     ports: !override ["127.0.0.1::5173"]
+    environment:
+      __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: frontend
   checks:
     build:
       context: ./backend

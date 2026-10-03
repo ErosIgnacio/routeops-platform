@@ -59,6 +59,9 @@ el .env local. Los endpoints internos son database/osrm/vroom/backend/frontend;
 la API y frontend se publican únicamente en loopback con puertos asignados.
 Los demás puertos operacionales se eliminan mediante `!override` en el overlay.
 Compose >= 2.24.4 es requerido; se conservan sus restricciones e imágenes base.
+Solo el frontend de CI permite además el hostname interno `frontend` mediante
+`__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS`; no se deshabilita allowedHosts ni se
+modifica la configuración operacional de Vite.
 
 El mapa de CI y sus índices se generan en `.ci-work/osrm`. Los volúmenes y red
 pertenecen exclusivamente al proyecto nuevo. Las fixtures PostgreSQL crean
@@ -125,6 +128,14 @@ un contexto específico de comprobación. También se corrigió la exclusión de
 informes ocultos en upload-artifact y se fijó v6/Node24 por SHA, conforme a su
 documentación. El trap retiró sus nueve servicios, red y dos volúmenes efímeros.
 
+Segunda ejecución: [37149428055](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37149428055),
+commit `afafc2b03f0280103f4ee56b373dbe792ddd93b0`. Backend/frontend aprobados,
+artefactos descargados y contrastados con sus SHA oficiales: 213 unitarias y
+36 frontend, cero fallos/errores/omisiones. El contexto Docker corregido recoge
+las 332 pruebas. Integración no llegó a ejecutarlas: Vite devolvió HTTP 403 al
+hostname interno frontend. Se agrega únicamente ese hostname en el overlay CI,
+conforme al mecanismo documentado; todos sus recursos descartables se retiraron.
+
 En Linux, desde checkout limpio, con Docker/Compose, Python, Bash, curl y jq:
 
 ```bash
@@ -164,5 +175,6 @@ Fuentes revisadas: [checkout v6](https://github.com/actions/checkout/blob/v6/REA
 [upload-artifact v6](https://github.com/actions/upload-artifact/blob/v6/README.md),
 [permisos y fijación de acciones](https://docs.github.com/en/actions/reference/security/secure-use),
 [merge/override Compose](https://docs.docker.com/reference/compose-file/merge/).
+El hostname adicional usa [la configuración oficial de Vite](https://vite.dev/config/server-options.html#server-allowedhosts).
 Las actualizaciones futuras deben revisar release/notas/capacidades y sustituir
 los SHA intencionalmente; no seguir una etiqueta móvil en el workflow.
