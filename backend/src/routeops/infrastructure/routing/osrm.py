@@ -112,9 +112,13 @@ class OsrmClient:
             payload = response.json()
             if payload.get("code") in ("NoSegment", "NoRoute"):
                 originals: list[dict[str, object]] = [
-                    {"role": role, "index": index,
-                     "original": [point.longitude, point.latitude],
-                     "snapped": None, "distance_m": None}
+                    {
+                        "role": role,
+                        "index": index,
+                        "original": [point.longitude, point.latitude],
+                        "snapped": None,
+                        "distance_m": None,
+                    }
                     for role, points in (("center", origins), ("order", destinations))
                     for index, point in enumerate(points)
                 ]
@@ -168,7 +172,9 @@ class OsrmClient:
             raise RoutingDependencyError("OSRM allocation matrix failed") from exc
 
     def route_sequence(
-        self, points: tuple[Coordinate, ...], max_snap_distance_m: float,
+        self,
+        points: tuple[Coordinate, ...],
+        max_snap_distance_m: float,
     ) -> FixedRoadRoute:
         """Route supplied waypoints in their exact order; never use OSRM trip."""
         if len(points) < 2:
@@ -200,20 +206,33 @@ class OsrmClient:
                     raise ValueError("invalid road waypoint")
                 if not all(math.isfinite(float(v)) for v in location):
                     raise ValueError("invalid road coordinates")
-                snaps.append({"index": index, "original": [point.longitude, point.latitude],
-                              "snapped": location, "distance_m": distance})
+                snaps.append(
+                    {
+                        "index": index,
+                        "original": [point.longitude, point.latitude],
+                        "snapped": location,
+                        "distance_m": distance,
+                    }
+                )
             if any(cast(float, item["distance_m"]) > max_snap_distance_m for item in snaps):
                 raise RoutingCoverageError("ROUTING_SNAP_TOO_FAR", snaps)
-            if any(not math.isfinite(float(leg[key])) or float(leg[key]) < 0
-                   for leg in legs for key in ("duration", "distance")):
+            if any(
+                not math.isfinite(float(leg[key])) or float(leg[key]) < 0
+                for leg in legs
+                for key in ("duration", "distance")
+            ):
                 raise ValueError("invalid road leg metrics")
-            geometry = tuple(Coordinate(float(lat), float(lon))
-                             for lon, lat in route["geometry"]["coordinates"])
+            geometry = tuple(
+                Coordinate(float(lat), float(lon)) for lon, lat in route["geometry"]["coordinates"]
+            )
             if len(geometry) < 2:
                 raise ValueError("fixed route geometry unavailable")
-            return FixedRoadRoute(tuple(round(float(leg["duration"])) for leg in legs),
-                                  tuple(round(float(leg["distance"])) for leg in legs),
-                                  geometry, tuple(snaps))
+            return FixedRoadRoute(
+                tuple(round(float(leg["duration"])) for leg in legs),
+                tuple(round(float(leg["distance"])) for leg in legs),
+                geometry,
+                tuple(snaps),
+            )
         except RoutingCoverageError:
             raise
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, OverflowError) as exc:

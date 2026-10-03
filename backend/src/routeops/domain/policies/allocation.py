@@ -128,37 +128,64 @@ class DeterministicAllocationPolicy:
         return AllocationOutcome(tuple(allocated), tuple(unassigned))
 
     def _evidence(
-        self, scenario: ScenarioData, order: Order,
-        available: dict[tuple[str, str], int], sequence: int,
+        self,
+        scenario: ScenarioData,
+        order: Order,
+        available: dict[tuple[str, str], int],
+        sequence: int,
     ) -> dict[str, Any]:
         required = {line.sku: line.quantity for line in order.lines}
         stock = {(row.distribution_center_id, row.sku): row for row in scenario.inventory}
         candidates = []
         for center in sorted(scenario.centers, key=lambda item: item.id):
             considered = {
-                sku: {"on_hand": row.on_hand if row else 0,
-                      "externally_reserved": row.reserved if row else 0,
-                      "safety_stock": row.safety_stock if row else 0,
-                      "routeops_reserved": 0,
-                      "available_before": available.get((center.id, sku), 0)}
-                for sku in required for row in (stock.get((center.id, sku)),)
+                sku: {
+                    "on_hand": row.on_hand if row else 0,
+                    "externally_reserved": row.reserved if row else 0,
+                    "safety_stock": row.safety_stock if row else 0,
+                    "routeops_reserved": 0,
+                    "available_before": available.get((center.id, sku), 0),
+                }
+                for sku in required
+                for row in (stock.get((center.id, sku)),)
             }
-            candidates.append({
-                "center_id": center.id, "stock": considered,
-                "missing_stock": {sku: quantity - available.get((center.id, sku), 0)
-                                  for sku, quantity in required.items()
-                                  if available.get((center.id, sku), 0) < quantity},
-                "vehicle_checks": [{
-                    "vehicle_id": vehicle.id,
-                    "skills_compatible": order.required_skills <= vehicle.skills,
-                    "skills": sorted(vehicle.skills),
-                    "capacity_compatible": vehicle.capacity.fits(order.demand),
-                    "capacity_units": vehicle.capacity.units,
-                    "capacity_weight_kg": str(Decimal(vehicle.capacity.weight_grams) / 1000),
-                    "capacity_volume_m3": str(Decimal(vehicle.capacity.volume_cm3) / 1_000_000),
-                } for vehicle in scenario.vehicles if vehicle.distribution_center_id == center.id],
-            })
-        return {"policy_version": self.version, "sequence": sequence,
-                "required": required, "required_skills": sorted(order.required_skills),
-                "demand": {"units": order.demand.units, "weight_grams": order.demand.weight_grams,
-                           "volume_cm3": order.demand.volume_cm3}, "candidates": candidates}
+            candidates.append(
+                {
+                    "center_id": center.id,
+                    "stock": considered,
+                    "missing_stock": {
+                        sku: quantity - available.get((center.id, sku), 0)
+                        for sku, quantity in required.items()
+                        if available.get((center.id, sku), 0) < quantity
+                    },
+                    "vehicle_checks": [
+                        {
+                            "vehicle_id": vehicle.id,
+                            "skills_compatible": order.required_skills <= vehicle.skills,
+                            "skills": sorted(vehicle.skills),
+                            "capacity_compatible": vehicle.capacity.fits(order.demand),
+                            "capacity_units": vehicle.capacity.units,
+                            "capacity_weight_kg": str(
+                                Decimal(vehicle.capacity.weight_grams) / 1000
+                            ),
+                            "capacity_volume_m3": str(
+                                Decimal(vehicle.capacity.volume_cm3) / 1_000_000
+                            ),
+                        }
+                        for vehicle in scenario.vehicles
+                        if vehicle.distribution_center_id == center.id
+                    ],
+                }
+            )
+        return {
+            "policy_version": self.version,
+            "sequence": sequence,
+            "required": required,
+            "required_skills": sorted(order.required_skills),
+            "demand": {
+                "units": order.demand.units,
+                "weight_grams": order.demand.weight_grams,
+                "volume_cm3": order.demand.volume_cm3,
+            },
+            "candidates": candidates,
+        }

@@ -128,12 +128,17 @@ demo_catalog = DemoCatalogService(
     scenario_repository, object_storage, upload_service, validation_service, publication_service
 )
 plan_comparisons = PlanComparisonService(
-    sessions, osrm, vroom, settings.planning_limits,
+    sessions,
+    osrm,
+    vroom,
+    settings.planning_limits,
     map_dataset_sha256=settings.map_dataset_sha256,
     timeout_seconds=settings.solver_timeout_seconds,
-    lease_seconds=settings.planning_lease_seconds, max_attempts=settings.planning_max_attempts,
+    lease_seconds=settings.planning_lease_seconds,
+    max_attempts=settings.planning_max_attempts,
     max_snap_distance_m=settings.planning_max_snap_distance_m,
-    solver_version=vroom.engine_version, adapter_version=vroom.adapter_version,
+    solver_version=vroom.engine_version,
+    adapter_version=vroom.adapter_version,
 )
 analytics_exports = AnalyticsExports(sessions, plan_comparisons)
 
@@ -179,7 +184,8 @@ class ManualRouteRequest(BaseModel):
     vehicle_id: str = Field(min_length=1, max_length=100, strict=True)
     center_id: str = Field(min_length=1, max_length=100, strict=True)
     order_ids: list[Annotated[str, Field(strict=True, min_length=1, max_length=100)]] = Field(
-        max_length=20)
+        max_length=20
+    )
 
 
 class CreateComparisonRequest(BaseModel):
@@ -230,7 +236,8 @@ def publication_error(_: Request, exc: PublicationError) -> JSONResponse:
 @app.exception_handler(OperatingCostError)
 @app.exception_handler(ComparisonError)
 def revision_run_error(
-    _: Request, exc: PlanningRunError | RunInputError | OperatingCostError | ComparisonError,
+    _: Request,
+    exc: PlanningRunError | RunInputError | OperatingCostError | ComparisonError,
 ) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
@@ -458,16 +465,24 @@ def publish_import(scenario_id: UUID, batch_id: UUID, response: Response) -> dic
 
 @app.get("/api/v1/scenarios/{scenario_id}/imports/{batch_id}/diagnostics", tags=["imports"])
 def get_validation_diagnostics(
-    scenario_id: UUID, batch_id: UUID, after: int = 0, limit: int = 100,
+    scenario_id: UUID,
+    batch_id: UUID,
+    after: int = 0,
+    limit: int = 100,
 ) -> dict[str, Any]:
     state = validation_service.get(scenario_id, batch_id)
     return validation_diagnostics(
         validation_service.issues(scenario_id, batch_id, after=after, limit=limit),
-        {"batch_id": str(batch_id), "stage": "VALIDATION",
-         "source": "immutable_validation_issues", "report": state["report"],
-         "contract_version": state["contract_version"],
-         "validator_version": state["validator_version"],
-         "context_sha256": state["context_sha256"], "package_sha256": state["package_sha256"]},
+        {
+            "batch_id": str(batch_id),
+            "stage": "VALIDATION",
+            "source": "immutable_validation_issues",
+            "report": state["report"],
+            "contract_version": state["contract_version"],
+            "validator_version": state["validator_version"],
+            "context_sha256": state["context_sha256"],
+            "package_sha256": state["package_sha256"],
+        },
     )
 
 
@@ -513,14 +528,22 @@ def lookup_revision_run(scenario_id: UUID, revision_no: int, key: str) -> dict[s
     "/api/v1/scenarios/{scenario_id}/revisions/{revision_no}/comparisons", tags=["comparisons"]
 )
 def create_comparison(
-    scenario_id: UUID, revision_no: int, body: CreateComparisonRequest,
-    request: Request, response: Response,
+    scenario_id: UUID,
+    revision_no: int,
+    body: CreateComparisonRequest,
+    request: Request,
+    response: Response,
 ) -> dict[str, Any]:
     key = request.headers.get("Idempotency-Key")
     if key is None:
         raise ComparisonError("COMPARISON_KEY_REQUIRED", 422)
-    result, created = plan_comparisons.submit(scenario_id, revision_no, key,
-        [route.model_dump() for route in body.manual_routes], body.solution_quality)
+    result, created = plan_comparisons.submit(
+        scenario_id,
+        revision_no,
+        key,
+        [route.model_dump() for route in body.manual_routes],
+        body.solution_quality,
+    )
     response.status_code = 202 if created else 200
     return result
 
@@ -549,9 +572,15 @@ def run_analytics(run_id: UUID) -> dict[str, Any]:
 
 def export_response(resource: str, identity: UUID, format_name: str) -> Response:
     payload, media, filename = analytics_exports.export(resource, identity, format_name)
-    return Response(payload, media_type=media, headers={
-        "Content-Disposition": f'attachment; filename="{filename}"',
-        "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"})
+    return Response(
+        payload,
+        media_type=media,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @app.get("/api/v1/runs/{run_id}/exports/{format_name}", tags=["analytics"])
@@ -631,11 +660,16 @@ def get_plan_metrics(run_id: UUID) -> dict[str, Any]:
 
 @app.get("/api/v1/runs/{run_id}/diagnostics", tags=["planning"])
 def get_run_diagnostics(
-    run_id: UUID, offset: int = 0, limit: int = 100,
-    stage: str | None = None, code: str | None = None, certainty: str | None = None,
+    run_id: UUID,
+    offset: int = 0,
+    limit: int = 100,
+    stage: str | None = None,
+    code: str | None = None,
+    certainty: str | None = None,
 ) -> dict[str, Any]:
-    return diagnostic_queries.get(run_id, offset=offset, limit=limit,
-                                  stage=stage, code=code, certainty=certainty)
+    return diagnostic_queries.get(
+        run_id, offset=offset, limit=limit, stage=stage, code=code, certainty=certainty
+    )
 
 
 @app.get("/api/v1/runs/{run_id}", tags=["planning"])

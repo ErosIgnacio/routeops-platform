@@ -14,9 +14,14 @@ from routeops.infrastructure.solver.errors import SolverInputError, SolverRespon
 from routeops.infrastructure.solver.vroom import VroomAdapter
 
 
-@pytest.mark.parametrize("field", [
-    "max_route_distance_meters", "max_driving_seconds", "max_delivery_tasks",
-])
+@pytest.mark.parametrize(
+    "field",
+    [
+        "max_route_distance_meters",
+        "max_driving_seconds",
+        "max_delivery_tasks",
+    ],
+)
 @pytest.mark.parametrize("invalid", [0, -1, 2_147_483_648, 1.5, True])
 def test_vehicle_limit_rejects_invalid_input(field: str, invalid: object) -> None:
     original = problem()
@@ -35,8 +40,10 @@ def test_vehicle_limits_map_and_reconcile_inclusive_bounds() -> None:
 
     original = problem()
     vehicle = replace(
-        original.vehicles[0], max_route_distance_meters=4000,
-        max_driving_seconds=1200, max_delivery_tasks=1,
+        original.vehicles[0],
+        max_route_distance_meters=4000,
+        max_driving_seconds=1200,
+        max_delivery_tasks=1,
     )
     candidate = replace(original, contract_version="1.1", vehicles=(vehicle,))
     captured: dict[str, Any] = {}
@@ -49,9 +56,11 @@ def test_vehicle_limits_map_and_reconcile_inclusive_bounds() -> None:
     result = VroomAdapter("http://vroom:3000").solve(candidate)
     sent = captured["vehicles"]
     assert isinstance(sent, list)
-    assert {name: sent[0][name] for name in (
-        "max_distance", "max_travel_time", "max_tasks"
-    )} == {"max_distance": 4000, "max_travel_time": 1200, "max_tasks": 1}
+    assert {name: sent[0][name] for name in ("max_distance", "max_travel_time", "max_tasks")} == {
+        "max_distance": 4000,
+        "max_travel_time": 1200,
+        "max_tasks": 1,
+    }
     reconcile_result(
         replace(candidate, options=replace(candidate.options, request_geometry=False)), result
     )
@@ -73,12 +82,14 @@ def test_vehicle_limits_map_and_reconcile_inclusive_bounds() -> None:
     route = result.routes[0]
     extra_step = replace(route.steps[1], task_id=extra_task.task_id, order_id="ORD-2")
     extra_result = replace(
-        result, routes=(replace(route, steps=(*route.steps[:2], extra_step, *route.steps[2:])),),
+        result,
+        routes=(replace(route, steps=(*route.steps[:2], extra_step, *route.steps[2:])),),
     )
     with pytest.raises(SolverResponseError, match="delivery tasks"):
         reconcile_result(
             replace(
-                candidate, tasks=(*candidate.tasks, extra_task),
+                candidate,
+                tasks=(*candidate.tasks, extra_task),
                 options=replace(candidate.options, request_geometry=False),
             ),
             extra_result,

@@ -59,7 +59,7 @@ class DiagnosticQuery:
             "INFERRED",
         ):
             raise OperatingCostError("DIAGNOSTIC_FILTER_INVALID", 422)
-        with (nullcontext(snapshot) if snapshot is not None else self.sessions()) as session:
+        with nullcontext(snapshot) if snapshot is not None else self.sessions() as session:
             if snapshot is None:
                 session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
             run = session.get(PlanningRunModel, run_id)

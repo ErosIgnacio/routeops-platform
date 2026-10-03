@@ -23,12 +23,19 @@ class RunRepository(Protocol):
         completed_at: datetime,
         result: dict[str, Any],
         kpis: dict[str, Any],
-        *, timer: AttemptTimer | None = None, timing_token: UUID | None = None,
+        *,
+        timer: AttemptTimer | None = None,
+        timing_token: UUID | None = None,
     ) -> None: ...
 
     def fail(
-        self, run_id: UUID, completed_at: datetime, error: str,
-        *, timer: AttemptTimer | None = None, timing_token: UUID | None = None,
+        self,
+        run_id: UUID,
+        completed_at: datetime,
+        error: str,
+        *,
+        timer: AttemptTimer | None = None,
+        timing_token: UUID | None = None,
     ) -> None: ...
 
     def record_timing(self, run_id: UUID, token: UUID, event: dict[str, Any]) -> None: ...

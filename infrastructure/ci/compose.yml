@@ -1,0 +1,46 @@
+# Merge with the existing Compose file; retain its pinned images and commands.
+# Requires Compose >= 2.24.4. No operational host ports or OSRM bind mounts.
+services:
+  database:
+    ports: !override []
+  osrm-prepare:
+    volumes: !override
+      - ./.ci-work/osrm:/data
+  osrm:
+    ports: !override []
+    volumes: !override
+      - ./.ci-work/osrm:/data:ro
+  vroom:
+    ports: !override []
+  backend:
+    ports: !override ["127.0.0.1::8000"]
+    environment:
+      ROUTEOPS_ENV: test
+      ROUTEOPS_VROOM_URL: http://vroom:3000
+      ROUTEOPS_OSRM_URL: http://osrm:5000
+  planning-worker:
+    environment:
+      ROUTEOPS_VROOM_URL: http://vroom:3000
+      ROUTEOPS_OSRM_URL: http://osrm:5000
+  comparison-worker:
+    environment:
+      ROUTEOPS_VROOM_URL: http://vroom:3000
+      ROUTEOPS_OSRM_URL: http://osrm:5000
+  frontend:
+    ports: !override ["127.0.0.1::5173"]
+  checks:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.ci
+    profiles: [tools]
+    environment:
+      PYTHONPATH: /app/src
+      ROUTEOPS_TEST_DATABASE_URL: ${ROUTEOPS_DATABASE_URL:?CI database URL required}
+      ROUTEOPS_DATABASE_URL: ${ROUTEOPS_DATABASE_URL:?CI database URL required}
+      ROUTEOPS_TEST_OSRM_URL: http://osrm:5000
+      ROUTEOPS_TEST_VROOM_URL: http://vroom:3000
+      ROUTEOPS_INTEGRATION_BASE_URL: http://backend:8000
+    volumes:
+      - ./.ci-artifacts:/reports
+      - ./scripts:/scripts:ro
+    command: [python, -m, pytest, -m, integration, --junitxml=/reports/integration.xml]

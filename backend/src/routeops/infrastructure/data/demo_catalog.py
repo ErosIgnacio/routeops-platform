@@ -141,7 +141,10 @@ class DemoCatalogService:
         return self.prepare_rows(f"Demo 2.4 · {name}", name, demo_rows(demos[name]))
 
     def prepare_rows(
-        self, title: str, name: str, rows: DatasetRows,
+        self,
+        title: str,
+        name: str,
+        rows: DatasetRows,
     ) -> dict[str, Any]:
         """Reuse upload/validation/publication; every preparation has independent stock."""
         scenario_id: UUID = self.scenarios.create(title)

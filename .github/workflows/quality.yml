@@ -1,0 +1,98 @@
+name: RouteOps quality
+on:
+  push:
+    branches: [main, 'feat/**', 'fix/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+
+jobs:
+  backend:
+    name: Backend quality and unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14.7'
+      - run: python -m pip install --disable-pip-version-check -r backend/requirements-dev.lock.txt
+      - name: Format, lint and strict typing
+        working-directory: backend
+        run: |
+          ruff format --check src tests migrations ../scripts/ci
+          ruff check src tests migrations ../scripts/ci
+          mypy src
+      - name: Unit tests and CI-tool contracts
+        run: |
+          mkdir -p .ci-artifacts
+          python -m unittest discover -s scripts/ci -p 'test_*.py' -v
+          cd backend
+          pytest -m 'not integration' --junitxml=../.ci-artifacts/unit.xml --cov=routeops --cov-report=xml:../.ci-artifacts/coverage.xml
+          python ../scripts/ci/check_junit.py ../.ci-artifacts/unit.xml
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: backend-${{ github.sha }}
+          path: .ci-artifacts/*.xml
+          retention-days: 14
+          if-no-files-found: warn
+  frontend:
+    name: Frontend tests, types and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.21.0'
+          package-manager-cache: false
+      - run: mkdir -p .ci-artifacts
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: npm test -- --reporter=default --reporter=junit --outputFile=../.ci-artifacts/frontend.xml
+        working-directory: frontend
+      - run: python3 scripts/ci/check_junit.py .ci-artifacts/frontend.xml
+      - run: npx tsc --noEmit && npm run build
+        working-directory: frontend
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: frontend-${{ github.sha }}
+          path: .ci-artifacts/*.xml
+          retention-days: 14
+          if-no-files-found: warn
+  integration:
+    name: PostGIS migrations, real routing and Compose smoke
+    needs: [backend, frontend]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14.7'
+      - run: bash scripts/ci/integration.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: integration-${{ github.sha }}
+          path: |
+            .ci-artifacts/*.xml
+            .ci-artifacts/*.txt
+          retention-days: 14
+          if-no-files-found: warn

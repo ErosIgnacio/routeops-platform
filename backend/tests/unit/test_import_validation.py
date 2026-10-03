@@ -78,9 +78,7 @@ def csv_data(
         stream = io.StringIO(newline="")
         writer = csv.writer(stream)
         writer.writerow([spec.name for spec in SCHEMA[name]])
-        writer.writerows(
-            values + [""] * (len(SCHEMA[name]) - len(values)) for values in rows[name]
-        )
+        writer.writerows(values + [""] * (len(SCHEMA[name]) - len(values)) for values in rows[name])
         result[f"{name}.csv"] = stream.getvalue().encode("utf-8-sig" if bom else "utf-8")
     return result
 
@@ -121,14 +119,17 @@ def xlsx_with_rows() -> bytes:
     return output.getvalue()
 
 
-@pytest.mark.parametrize("value,code", [
-    ("1", None),
-    ("2147483647", None),
-    ("0", "QUANTITY_RANGE"),
-    ("2147483648", "QUANTITY_RANGE"),
-    ("-1", "INTEGER_INVALID"),
-    ("1.5", "INTEGER_INVALID"),
-])
+@pytest.mark.parametrize(
+    "value,code",
+    [
+        ("1", None),
+        ("2147483647", None),
+        ("0", "QUANTITY_RANGE"),
+        ("2147483648", "QUANTITY_RANGE"),
+        ("-1", "INTEGER_INVALID"),
+        ("1.5", "INTEGER_INVALID"),
+    ],
+)
 def test_optional_vehicle_limits_validate_exact_bounds(value: str, code: str | None) -> None:
     rows = {name: [list(values)] for name, values in ROWS.items()}
     rows["vehicles"][0].extend([value, value, value])
@@ -155,9 +156,11 @@ def test_legacy_vehicle_headers_keep_old_normalized_rows() -> None:
     )
     normalized: list[dict[str, object]] = []
     report = validate_package(
-        files, context=context,
-        row_sink=lambda name, _source, _row, values: normalized.append(values)
-        if name == "vehicles" else None,
+        files,
+        context=context,
+        row_sink=lambda name, _source, _row, values: (
+            normalized.append(values) if name == "vehicles" else None
+        ),
     )
     assert report.valid and report.contract_version == "2.1"
     assert len(normalized) == 1
@@ -188,8 +191,10 @@ def test_old_xlsx_vehicle_sheet_remains_compatible() -> None:
         planning_date=date(2026, 10, 15),
         horizon_start_at=datetime.fromisoformat("2026-10-15T08:00:00-03:00"),
         horizon_end_at=datetime.fromisoformat("2026-10-15T18:00:00-03:00"),
-        timezone_iana="America/Santiago", currency="CLP",
-        contract_version="2.1", validator_version="2.3b.1",
+        timezone_iana="America/Santiago",
+        currency="CLP",
+        contract_version="2.1",
+        validator_version="2.3b.1",
     )
     assert validate_package(files, context=legacy).valid
 

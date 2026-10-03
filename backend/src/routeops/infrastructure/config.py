@@ -48,9 +48,7 @@ class Settings:
         planning_lease = int(os.getenv("ROUTEOPS_PLANNING_LEASE_SECONDS", "120"))
         planning_attempts = int(os.getenv("ROUTEOPS_PLANNING_MAX_ATTEMPTS", "3"))
         planning_poll = int(os.getenv("ROUTEOPS_PLANNING_POLL_SECONDS", "5"))
-        max_snap_distance_m = float(
-            os.getenv("ROUTEOPS_PLANNING_MAX_SNAP_DISTANCE_M", "250")
-        )
+        max_snap_distance_m = float(os.getenv("ROUTEOPS_PLANNING_MAX_SNAP_DISTANCE_M", "250"))
         if (
             min(
                 retention_days,

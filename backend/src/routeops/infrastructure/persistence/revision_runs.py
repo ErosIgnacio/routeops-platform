@@ -206,12 +206,14 @@ class RevisionRunService:
                     "solution_quality": quality.value,
                     "allocation_policy": policy_version,
                     "contract_version": (
-                        "1.1" if any(
+                        "1.1"
+                        if any(
                             vehicle.max_route_distance_meters is not None
                             or vehicle.max_driving_seconds is not None
                             or vehicle.max_delivery_tasks is not None
                             for vehicle in prepared.vehicles
-                        ) else "1.0"
+                        )
+                        else "1.0"
                     ),
                 }
                 request_sha256 = hashlib.sha256(
@@ -321,9 +323,16 @@ class RevisionRunService:
                 job.lease_token = token
                 job.lease_until = now + timedelta(seconds=self.lease_seconds)
                 self._transition(session, job, "RUNNING", "LEASE_CLAIMED")
-                append_timing(session, job.run_id, token, job.attempts, {
-                    "kind": "ATTEMPT_STARTED", "occurred_at": now,
-                })
+                append_timing(
+                    session,
+                    job.run_id,
+                    token,
+                    job.attempts,
+                    {
+                        "kind": "ATTEMPT_STARTED",
+                        "occurred_at": now,
+                    },
+                )
                 return job.run_id, token
         self._exhausted(run_id)
         return None
@@ -399,7 +408,9 @@ class RevisionRunService:
             else:
                 code = exc.code
             self._fail(
-                run_id, token, code,
+                run_id,
+                token,
+                code,
                 exc.evidence if isinstance(exc, RoutingCoverageError) else None,
                 timer=timer,
             )
@@ -423,12 +434,20 @@ class RevisionRunService:
     def _record_timing(self, run_id: UUID, token: UUID, event: dict[str, Any]) -> None:
         with self.sessions.begin() as session:
             job = self._locked_job(session, run_id)
-            if (job is not None and job.status == "RUNNING" and job.lease_token == token
-                    and job.lease_until is not None and job.lease_until >= datetime.now(UTC)):
+            if (
+                job is not None
+                and job.status == "RUNNING"
+                and job.lease_token == token
+                and job.lease_until is not None
+                and job.lease_until >= datetime.now(UTC)
+            ):
                 append_timing(session, run_id, token, job.attempts, event)
 
     def _process(
-        self, run_id: UUID, token: UUID, timer: AttemptTimer | None = None,
+        self,
+        run_id: UUID,
+        token: UUID,
+        timer: AttemptTimer | None = None,
     ) -> None:
         timer = timer or AttemptTimer(lambda event: self._record_timing(run_id, token, event))
         with timer.phase("VALIDATE_RUN"):
@@ -484,18 +503,26 @@ class RevisionRunService:
         with timer.phase("RECONCILE"):
             reconcile_result(problem, solved, self.max_snap_distance_m)
             result = self._merge_unassigned(solved, allocation_unassigned)
-            result = diagnose_result(result, problem, self._diagnostic_allocations(attempt_id), {
-                "run_id": str(run_id), "revision_id": str(prepared.revision_id),
-                "content_sha256": prepared.content_sha256,
-                "context_sha256": prepared.context_sha256,
-                "normalized_problem_sha256": _hash(to_primitive(problem)),
-                "allocation_attempt_id": str(attempt_id), "policy_version": policy_version,
-                "source": "immutable_revision_and_allocation_decisions",
-            })
+            result = diagnose_result(
+                result,
+                problem,
+                self._diagnostic_allocations(attempt_id),
+                {
+                    "run_id": str(run_id),
+                    "revision_id": str(prepared.revision_id),
+                    "content_sha256": prepared.content_sha256,
+                    "context_sha256": prepared.context_sha256,
+                    "normalized_problem_sha256": _hash(to_primitive(problem)),
+                    "allocation_attempt_id": str(attempt_id),
+                    "policy_version": policy_version,
+                    "source": "immutable_revision_and_allocation_decisions",
+                },
+            )
         self._finish(run_id, token, result, problem, snap_evidence, timer=timer)
 
     def _prepare_run(
-        self, run_id: UUID,
+        self,
+        run_id: UUID,
     ) -> tuple[PreparedRevision, UUID | None, SolutionQuality, str]:
         with self.sessions() as session:
             job = session.get(RevisionRunJobModel, run_id)
@@ -726,30 +753,57 @@ class RevisionRunService:
         return WKTElement(f"LINESTRING ({points})", srid=4326)
 
     def _finish(
-        self, run_id: UUID, token: UUID, result: OptimizationResult,
-        problem: OptimizationProblem, snap_evidence: list[dict[str, object]],
-        *, timer: AttemptTimer | None = None,
+        self,
+        run_id: UUID,
+        token: UUID,
+        result: OptimizationResult,
+        problem: OptimizationProblem,
+        snap_evidence: list[dict[str, object]],
+        *,
+        timer: AttemptTimer | None = None,
     ) -> bool:
         if timer is not None:
-            timer.emit({"kind": "PHASE_STARTED", "phase": "PERSIST_RESULT",
-                        "occurred_at": datetime.now(UTC)})
+            timer.emit(
+                {
+                    "kind": "PHASE_STARTED",
+                    "phase": "PERSIST_RESULT",
+                    "occurred_at": datetime.now(UTC),
+                }
+            )
         persist_start = perf_counter_ns()
         try:
             return self._persist_result(
-                run_id, token, result, problem, snap_evidence, timer, persist_start,
+                run_id,
+                token,
+                result,
+                problem,
+                snap_evidence,
+                timer,
+                persist_start,
             )
         except Exception:
             if timer is not None:
-                timer.emit({"kind": "PHASE_FINISHED", "phase": "PERSIST_RESULT",
-                            "occurred_at": datetime.now(UTC), "outcome": "FAILED",
-                            "duration_ns": perf_counter_ns() - persist_start,
-                            "details": {"scope": "failed_persistence_call_including_rollback"}})
+                timer.emit(
+                    {
+                        "kind": "PHASE_FINISHED",
+                        "phase": "PERSIST_RESULT",
+                        "occurred_at": datetime.now(UTC),
+                        "outcome": "FAILED",
+                        "duration_ns": perf_counter_ns() - persist_start,
+                        "details": {"scope": "failed_persistence_call_including_rollback"},
+                    }
+                )
             raise
 
     def _persist_result(
-        self, run_id: UUID, token: UUID, result: OptimizationResult,
-        problem: OptimizationProblem, snap_evidence: list[dict[str, object]],
-        timer: AttemptTimer | None, persist_start: int,
+        self,
+        run_id: UUID,
+        token: UUID,
+        result: OptimizationResult,
+        problem: OptimizationProblem,
+        snap_evidence: list[dict[str, object]],
+        timer: AttemptTimer | None,
+        persist_start: int,
     ) -> bool:
         data = to_primitive(result)
         kpis = DemoPlanningService._kpis(result)
@@ -774,10 +828,13 @@ class RevisionRunService:
             run = session.get(PlanningRunModel, run_id)
             assert run is not None
             run.result_data = data
-            run.kpis = {**kpis, "network_coverage": {
-                "max_snap_distance_m": self.max_snap_distance_m,
-                "points": snap_evidence,
-            }}
+            run.kpis = {
+                **kpis,
+                "network_coverage": {
+                    "max_snap_distance_m": self.max_snap_distance_m,
+                    "points": snap_evidence,
+                },
+            }
             decisions = list(
                 session.execute(
                     select(AllocationOrderDecisionModel.id, OrderModel.source_id)
@@ -817,19 +874,38 @@ class RevisionRunService:
                     )
                 )
             session.flush()
-            persist_diagnostics(session, run_id, result_document(data, {
-                "run_id": str(run_id), "input_sha256": _hash(run.input_data),
-                "scenario_revision_id": str(run.scenario_revision_id),
-                "allocation_attempt_id": str(job.allocation_attempt_id),
-                "solver": data["solver"], "source": "committed_result_and_recorded_decisions",
-            }), token, job.attempts)
+            persist_diagnostics(
+                session,
+                run_id,
+                result_document(
+                    data,
+                    {
+                        "run_id": str(run_id),
+                        "input_sha256": _hash(run.input_data),
+                        "scenario_revision_id": str(run.scenario_revision_id),
+                        "allocation_attempt_id": str(job.allocation_attempt_id),
+                        "solver": data["solver"],
+                        "source": "committed_result_and_recorded_decisions",
+                    },
+                ),
+                token,
+                job.attempts,
+            )
             if timer is not None:
-                append_timing(session, run_id, token, job.attempts, {
-                    "kind": "PHASE_FINISHED", "phase": "PERSIST_RESULT",
-                    "occurred_at": datetime.now(UTC), "outcome": "SUCCEEDED",
-                    "duration_ns": perf_counter_ns() - persist_start,
-                    "details": {"scope": "through_flush_excludes_final_commit"},
-                })
+                append_timing(
+                    session,
+                    run_id,
+                    token,
+                    job.attempts,
+                    {
+                        "kind": "PHASE_FINISHED",
+                        "phase": "PERSIST_RESULT",
+                        "occurred_at": datetime.now(UTC),
+                        "outcome": "SUCCEEDED",
+                        "duration_ns": perf_counter_ns() - persist_start,
+                        "details": {"scope": "through_flush_excludes_final_commit"},
+                    },
+                )
                 append_timing(session, run_id, token, job.attempts, timer.finish("READY"))
             job.lease_token = None
             job.lease_until = None
@@ -837,9 +913,13 @@ class RevisionRunService:
         return True
 
     def _fail(
-        self, run_id: UUID, token: UUID, code: str,
+        self,
+        run_id: UUID,
+        token: UUID,
+        code: str,
         snap_evidence: list[dict[str, object]] | None = None,
-        *, timer: AttemptTimer | None = None,
+        *,
+        timer: AttemptTimer | None = None,
     ) -> None:
         with self.sessions.begin() as session:
             job = session.get(RevisionRunJobModel, run_id)
@@ -861,11 +941,22 @@ class RevisionRunService:
             run = session.get(PlanningRunModel, run_id)
             assert run is not None
             run.error = code
-            persist_diagnostics(session, run_id, failure_document(code, {
-                "run_id": str(run_id), "input_sha256": _hash(run.input_data),
-                "scenario_revision_id": str(run.scenario_revision_id),
-                "source": "fenced_worker_failure",
-            }, snap_evidence), token, job.attempts)
+            persist_diagnostics(
+                session,
+                run_id,
+                failure_document(
+                    code,
+                    {
+                        "run_id": str(run_id),
+                        "input_sha256": _hash(run.input_data),
+                        "scenario_revision_id": str(run.scenario_revision_id),
+                        "source": "fenced_worker_failure",
+                    },
+                    snap_evidence,
+                ),
+                token,
+                job.attempts,
+            )
             if timer is not None:
                 append_timing(session, run_id, token, job.attempts, timer.finish("FAILED"))
             else:
@@ -876,10 +967,12 @@ class RevisionRunService:
             assert run is not None
             run.error = code
             if snap_evidence is not None:
-                run.kpis = {"network_coverage": {
-                    "max_snap_distance_m": self.max_snap_distance_m,
-                    "points": snap_evidence,
-                }}
+                run.kpis = {
+                    "network_coverage": {
+                        "max_snap_distance_m": self.max_snap_distance_m,
+                        "points": snap_evidence,
+                    }
+                }
             self._transition(session, job, "FAILED", code)
 
     def _exhausted(self, run_id: UUID) -> None:
@@ -899,10 +992,20 @@ class RevisionRunService:
             run = session.get(PlanningRunModel, run_id)
             assert run is not None
             run.error = "RUN_RETRY_LIMIT"
-            persist_diagnostics(session, run_id, failure_document("RUN_RETRY_LIMIT", {
-                "run_id": str(run_id), "input_sha256": _hash(run.input_data),
-                "source": "lease_recovery_retry_limit",
-            }), None, job.attempts)
+            persist_diagnostics(
+                session,
+                run_id,
+                failure_document(
+                    "RUN_RETRY_LIMIT",
+                    {
+                        "run_id": str(run_id),
+                        "input_sha256": _hash(run.input_data),
+                        "source": "lease_recovery_retry_limit",
+                    },
+                ),
+                None,
+                job.attempts,
+            )
             interrupt_attempt(session, job, "RETRY_LIMIT")
             job.lease_token = None
             job.lease_until = None

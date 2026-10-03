@@ -131,9 +131,7 @@ def test_route_limits_and_collective_task_bound_do_not_claim_individual_causalit
     assert not causes[1].evidence["individual_cause_proven"]
 
 
-def test_local_time_cause_precedes_solver_observation_without_changing_plan() -> (
-    None
-):
+def test_local_time_cause_precedes_solver_observation_without_changing_plan() -> None:
     data = problem()
     task = replace(data.tasks[0], service_seconds=100000)
     omitted = UnassignedTask(

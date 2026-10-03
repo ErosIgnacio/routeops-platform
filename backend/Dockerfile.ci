@@ -1,0 +1,12 @@
+# Same Python release and dependency locks as the application, with test tools.
+FROM python:3.14.7-slim-bookworm
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app/src
+WORKDIR /app
+COPY requirements.lock.txt requirements-dev.lock.txt ./
+RUN pip install --no-cache-dir --disable-pip-version-check -r requirements-dev.lock.txt
+COPY pyproject.toml alembic.ini ./
+COPY src ./src
+COPY migrations ./migrations
+COPY tests ./tests
+COPY data ./data
+CMD ["python", "-m", "pytest", "-m", "integration"]

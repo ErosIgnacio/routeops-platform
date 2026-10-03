@@ -75,10 +75,8 @@ def allocation_demos() -> dict[str, AllocationDemo]:
             "exclusive_stock",
             centers,
             (
-                _order("ORD-A", ("SKU-A", 2), priority=90,
-                       location=Coordinate(-33.446, -70.660)),
-                _order("ORD-B", ("SKU-B", 2), priority=80,
-                       location=Coordinate(-33.439, -70.632)),
+                _order("ORD-A", ("SKU-A", 2), priority=90, location=Coordinate(-33.446, -70.660)),
+                _order("ORD-B", ("SKU-B", 2), priority=80, location=Coordinate(-33.439, -70.632)),
                 _order("ORD-MIX", ("SKU-A", 1), ("SKU-B", 1), priority=70),
             ),
             vehicles,
@@ -91,8 +89,7 @@ def allocation_demos() -> dict[str, AllocationDemo]:
         "choice_between_centers": AllocationDemo(
             "choice_between_centers",
             centers,
-            (_order("ORD-CHOICE", ("SKU-X", 2),
-                    location=Coordinate(-33.439, -70.632)),),
+            (_order("ORD-CHOICE", ("SKU-X", 2), location=Coordinate(-33.439, -70.632)),),
             vehicles,
             (
                 OperationalStock("CD-A", "SKU-X", 5, 0, 0, 0),
@@ -104,8 +101,9 @@ def allocation_demos() -> dict[str, AllocationDemo]:
             "shared_stock_restricted",
             centers,
             (
-                _order("ORD-FLEX", ("SKU-X", 5), priority=90,
-                       location=Coordinate(-33.446, -70.660)),
+                _order(
+                    "ORD-FLEX", ("SKU-X", 5), priority=90, location=Coordinate(-33.446, -70.660)
+                ),
                 _order("ORD-RESTRICTED", ("SKU-X", 5), ("SKU-Y", 1), priority=80),
             ),
             vehicles,
@@ -120,9 +118,13 @@ def allocation_demos() -> dict[str, AllocationDemo]:
             "fleet_restrictions",
             (centers[0],),
             (
-                _order("ORD-SKILL", ("SKU-X", 2), priority=90,
-                       skills=frozenset({"cold"}),
-                       location=Coordinate(-33.446, -70.660)),
+                _order(
+                    "ORD-SKILL",
+                    ("SKU-X", 2),
+                    priority=90,
+                    skills=frozenset({"cold"}),
+                    location=Coordinate(-33.446, -70.660),
+                ),
                 _order("ORD-CAPACITY", ("SKU-X", 8), priority=80),
             ),
             (_vehicle("CD-A", capacity=5),),

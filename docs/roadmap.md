@@ -232,6 +232,19 @@ Acceptance criteria:
 
 ## Milestone 4 — portfolio quality
 
+Status: **4.1 in review on `feat/m4-1-quality-ci`** from accepted Hito 3
+`c308bfb5224edf8268102cafd813faa8e9d5f206`. No integration into main or new tag.
+
+Approved deliveries:
+
+1. **4.1 — automated quality and CI:** formatting, Ruff, strict mypy, unit and
+   frontend checks, clean Linux Compose integration, migrations, real routing,
+   smoke and retained test evidence. See [the CI runbook](milestone-4-1-quality-ci.md).
+2. **4.2 — performance and basic security:** measured resource/performance
+   hardening and security boundaries. Not started.
+3. **4.3 — documentation, reproduction and portfolio presentation:** final
+   runbooks, backup/reset guidance, third-party review and presentation. Not started.
+
 Deliverables:
 
 - Test pyramid completion, deterministic benchmarks, upload/resource hardening,

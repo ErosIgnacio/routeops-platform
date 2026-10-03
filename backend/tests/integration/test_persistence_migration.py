@@ -2224,7 +2224,9 @@ class FixedMatrix:
         return tuple(tuple(100 for _ in destinations) for _ in origins)
 
     def checked_duration_matrix(
-        self, origins: tuple[object, ...], destinations: tuple[object, ...],
+        self,
+        origins: tuple[object, ...],
+        destinations: tuple[object, ...],
         max_snap_distance_m: float,
     ) -> object:
         from routeops.infrastructure.routing.osrm import AllocationMatrix
@@ -2239,18 +2241,31 @@ def test_uncovered_point_fails_before_reserving_stock(database: Engine, tmp_path
 
     class UncoveredMatrix(FixedMatrix):
         def checked_duration_matrix(
-            self, origins: tuple[object, ...], destinations: tuple[object, ...],
+            self,
+            origins: tuple[object, ...],
+            destinations: tuple[object, ...],
             max_snap_distance_m: float,
         ) -> object:
-            raise RoutingCoverageError("ROUTING_SNAP_TOO_FAR", [
-                {"role": "center", "index": 0, "original": [-70.7, -33.44],
-                 "snapped": [-70.68, -33.435], "distance_m": 1902.0},
-            ])
+            raise RoutingCoverageError(
+                "ROUTING_SNAP_TOO_FAR",
+                [
+                    {
+                        "role": "center",
+                        "index": 0,
+                        "original": [-70.7, -33.44],
+                        "snapped": [-70.68, -33.435],
+                        "distance_m": 1902.0,
+                    },
+                ],
+            )
 
     sessions = create_session_factory(database)
     service = RevisionRunService(
-        sessions, OperationalAllocationService(sessions, FixedAllocationTravel()),
-        UncoveredMatrix(), AllUnassignedSolver(), WorkloadLimits(),  # type: ignore[arg-type]
+        sessions,
+        OperationalAllocationService(sessions, FixedAllocationTravel()),
+        UncoveredMatrix(),
+        AllUnassignedSolver(),
+        WorkloadLimits(),  # type: ignore[arg-type]
     )
     queued, _ = service.submit(scenario, 1, "uncovered")
     assert service.process_once()
@@ -3029,46 +3044,61 @@ def test_vehicle_limit_migration_preserves_prior_objects(
                 trigger_count = connection.scalar(text(TRIGGER_COUNT_SQL))
             migrate(monkeypatch, url, "head")
             with engine.connect() as connection:
-                columns = connection.execute(text(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name='vehicles' AND column_name LIKE 'max_%'"
-                )).scalars().all()
+                columns = (
+                    connection.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_name='vehicles' AND column_name LIKE 'max_%'"
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
                 assert set(columns) == {
-                    "max_route_distance_meters", "max_driving_seconds", "max_delivery_tasks"
+                    "max_route_distance_meters",
+                    "max_driving_seconds",
+                    "max_delivery_tasks",
                 }
             command.downgrade(Config(str(ALEMBIC_INI)), "c951e2a7d430")
             with engine.connect() as connection:
                 assert connection.scalar(text(TRIGGER_COUNT_SQL)) == trigger_count
-                assert connection.scalar(
-                    text("SELECT oid FROM pg_extension WHERE extname='postgis'")
-                ) == postgis_oid
+                assert (
+                    connection.scalar(text("SELECT oid FROM pg_extension WHERE extname='postgis'"))
+                    == postgis_oid
+                )
         finally:
             engine.dispose()
 
 
 def test_vehicle_limits_persist_with_provenance_and_refuse_lossy_downgrade(
-    database: Engine, tmp_path: Path,
+    database: Engine,
+    tmp_path: Path,
 ) -> None:
     sessions = create_session_factory(database)
     storage = LocalObjectStorage(tmp_path / "objects")
     services = _publication_services(database, storage, tmp_path / "spool")
     scenario = ScenarioRepository(sessions).create("Route limits")
     rows = _publication_rows()
-    rows["vehicles"][0].update({
-        "max_route_distance_meters": "4000",
-        "max_driving_seconds": "1200",
-        "max_delivery_tasks": "1",
-    })
+    rows["vehicles"][0].update(
+        {
+            "max_route_distance_meters": "4000",
+            "max_driving_seconds": "1200",
+            "max_delivery_tasks": "1",
+        }
+    )
     batch = _validated_publication_batch(scenario, "limits", rows, services, storage)
     revision, created = services[2].publish(scenario, batch)
     assert created and revision["contract_version"] == "2.2"
     with sessions() as session:
-        row = session.scalar(select(VehicleModel).where(
-            VehicleModel.scenario_revision_id == UUID(revision["id"])
-        ))
+        row = session.scalar(
+            select(VehicleModel).where(VehicleModel.scenario_revision_id == UUID(revision["id"]))
+        )
         assert row is not None
-        assert (row.max_route_distance_meters, row.max_driving_seconds,
-                row.max_delivery_tasks) == (4000, 1200, 1)
+        assert (row.max_route_distance_meters, row.max_driving_seconds, row.max_delivery_tasks) == (
+            4000,
+            1200,
+            1,
+        )
         assert row.source_row_number == 2 and row.source_import_file_id is not None
         prepared = load_prepared_revision(session, UUID(revision["id"]))
         assert prepared.vehicles[0].max_route_distance_meters == 4000
@@ -3085,13 +3115,13 @@ def test_vehicle_limits_persist_with_provenance_and_refuse_lossy_downgrade(
 
 
 def test_legacy_21_batch_replays_and_publishes_without_new_vehicle_fields(
-    database: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    database: Engine,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sessions = create_session_factory(database)
     storage = LocalObjectStorage(tmp_path / "objects")
-    upload, validation, publisher = _publication_services(
-        database, storage, tmp_path / "spool"
-    )
+    upload, validation, publisher = _publication_services(database, storage, tmp_path / "spool")
     scenario = ScenarioRepository(sessions).create("Legacy replay")
     files: list[ReceivedFile] = []
     rows = _publication_rows()
@@ -3114,9 +3144,7 @@ def test_legacy_21_batch_replays_and_publishes_without_new_vehicle_fields(
     batch, _ = upload.create(
         scenario, "legacy", ReceivedPackage(tuple(files), manifest.hexdigest())
     )
-    legacy = replace(
-        _validation_context(), contract_version="2.1", validator_version="2.3b.1"
-    )
+    legacy = replace(_validation_context(), contract_version="2.1", validator_version="2.3b.1")
     validation.request(scenario, batch, legacy)
     claim = validation.claim()
     assert claim is not None and claim[0] == batch
@@ -3127,14 +3155,13 @@ def test_legacy_21_batch_replays_and_publishes_without_new_vehicle_fields(
     revision, created = publisher.publish(scenario, batch)
     assert created and revision["contract_version"] == "2.1"
     with sessions() as session:
-        vehicle = session.scalar(select(VehicleModel).where(
-            VehicleModel.scenario_revision_id == UUID(revision["id"])
-        ))
+        vehicle = session.scalar(
+            select(VehicleModel).where(VehicleModel.scenario_revision_id == UUID(revision["id"]))
+        )
         assert vehicle is not None
         assert vehicle.max_route_distance_meters is None
         assert vehicle.max_driving_seconds is None
         assert vehicle.max_delivery_tasks is None
-
 
 
 def test_historical_demo_without_rate_snapshot_is_not_repriced(database: Engine) -> None:
@@ -3145,9 +3172,16 @@ def test_historical_demo_without_rate_snapshot_is_not_repriced(database: Engine)
     repository.start(run_id, "Historical demo", now, {"dataset_name": "historical"})
     with pytest.raises(OperatingCostError, match="COST_RESULT_NOT_AVAILABLE"):
         OperatingCostQuery(sessions).get(run_id)
-    result = {"status": "SUCCEEDED", "routes": [], "unassigned": [], "summary": {
-        "objective_cost_units": 0, "cost_scale": 100, "currency": "CLP",
-    }}
+    result = {
+        "status": "SUCCEEDED",
+        "routes": [],
+        "unassigned": [],
+        "summary": {
+            "objective_cost_units": 0,
+            "cost_scale": 100,
+            "currency": "CLP",
+        },
+    }
     repository.complete(run_id, now, result, {"estimated_cost": 0})
     before = repository.get(run_id)
     with pytest.raises(OperatingCostError, match="COST_RATES_NOT_RECORDED"):
@@ -3155,7 +3189,6 @@ def test_historical_demo_without_rate_snapshot_is_not_repriced(database: Engine)
     assert repository.get(run_id) == before
     with pytest.raises(OperatingCostError, match="RUN_NOT_FOUND"):
         OperatingCostQuery(sessions).get(uuid4())
-
 
 
 def test_real_vroom_cost_excludes_forced_wait_and_service(database: Engine, tmp_path: Path) -> None:
@@ -3166,32 +3199,55 @@ def test_real_vroom_cost_excludes_forced_wait_and_service(database: Engine, tmp_
     scenario, _, _ = _published_allocation_fixture(database, tmp_path)
     sessions = create_session_factory(database)
     with sessions() as session:
-        revision = session.scalar(select(ScenarioRevisionModel).where(
-            ScenarioRevisionModel.scenario_id == scenario))
+        revision = session.scalar(
+            select(ScenarioRevisionModel).where(ScenarioRevisionModel.scenario_id == scenario)
+        )
         assert revision is not None
         prepared = load_prepared_revision(session, revision.id)
-    request = prepared.problem(uuid4(), {prepared.orders[0].id: prepared.centers[0].id},
-                               SolutionQuality.BALANCED, 15)
-    first = replace(request.tasks[0], time_window_start=request.vehicles[0].shift_start + timedelta(
-        minutes=30), time_window_end=request.vehicles[0].shift_start + timedelta(minutes=40),
-        service_seconds=600)
-    second = replace(first, task_id=uuid4(), order_id="LATE", time_window_start=
-                     request.vehicles[0].shift_start + timedelta(hours=3), time_window_end=
-                     request.vehicles[0].shift_start + timedelta(hours=3, minutes=10))
-    vehicle = replace(request.vehicles[0], costs=replace(request.vehicles[0].costs,
-                      fixed_units=100_000, per_duty_hour_units=360_000, per_km_units=20_000))
+    request = prepared.problem(
+        uuid4(), {prepared.orders[0].id: prepared.centers[0].id}, SolutionQuality.BALANCED, 15
+    )
+    first = replace(
+        request.tasks[0],
+        time_window_start=request.vehicles[0].shift_start + timedelta(minutes=30),
+        time_window_end=request.vehicles[0].shift_start + timedelta(minutes=40),
+        service_seconds=600,
+    )
+    second = replace(
+        first,
+        task_id=uuid4(),
+        order_id="LATE",
+        time_window_start=request.vehicles[0].shift_start + timedelta(hours=3),
+        time_window_end=request.vehicles[0].shift_start + timedelta(hours=3, minutes=10),
+    )
+    vehicle = replace(
+        request.vehicles[0],
+        costs=replace(
+            request.vehicles[0].costs,
+            fixed_units=100_000,
+            per_duty_hour_units=360_000,
+            per_km_units=20_000,
+        ),
+    )
     request = replace(request, tasks=(first, second), vehicles=(vehicle,))
     result = VroomAdapter(VROOM_TEST_URL).solve(request)
     assert result.summary.assigned_task_count == 2
     assert result.summary.service_seconds == 1200
     assert result.summary.waiting_seconds >= 3600
-    business = estimate_operating_cost(to_primitive(result.routes), {
-        vehicle.source_vehicle_id: VehicleRate(Decimal(10), Decimal(36), Decimal(2)),
-    }, prepared.currency)
+    business = estimate_operating_cost(
+        to_primitive(result.routes),
+        {
+            vehicle.source_vehicle_id: VehicleRate(Decimal(10), Decimal(36), Decimal(2)),
+        },
+        prepared.currency,
+    )
     solver_decimal = Decimal(result.summary.objective_cost_units) / result.summary.cost_scale
     assert Decimal(business["total"]) > solver_decimal + Decimal(36)
-    driving_proxy_units = (Decimal(100_000) + Decimal(360_000) * result.summary.driving_seconds
-                           / 3600 + Decimal(20_000) * result.summary.distance_meters / 1000)
+    driving_proxy_units = (
+        Decimal(100_000)
+        + Decimal(360_000) * result.summary.driving_seconds / 3600
+        + Decimal(20_000) * result.summary.distance_meters / 1000
+    )
     assert abs(Decimal(result.summary.objective_cost_units) - driving_proxy_units) <= 1
 
 
@@ -3199,14 +3255,16 @@ def test_real_vroom_applies_optional_route_limits(database: Engine, tmp_path: Pa
     scenario, _, _ = _published_allocation_fixture(database, tmp_path)
     sessions = create_session_factory(database)
     with sessions() as session:
-        revision = session.scalar(select(ScenarioRevisionModel).where(
-            ScenarioRevisionModel.scenario_id == scenario
-        ))
+        revision = session.scalar(
+            select(ScenarioRevisionModel).where(ScenarioRevisionModel.scenario_id == scenario)
+        )
         assert revision is not None
         prepared = load_prepared_revision(session, revision.id)
     request = prepared.problem(
-        uuid4(), {prepared.orders[0].id: prepared.centers[0].id},
-        SolutionQuality.BALANCED, 15,
+        uuid4(),
+        {prepared.orders[0].id: prepared.centers[0].id},
+        SolutionQuality.BALANCED,
+        15,
     )
     solver = VroomAdapter(VROOM_TEST_URL)
     baseline = solver.solve(request)
@@ -3222,6 +3280,7 @@ def test_real_vroom_applies_optional_route_limits(database: Engine, tmp_path: Pa
     exact = solver.solve(limited)
     assert exact.summary.assigned_task_count == 1
     from routeops.application.optimization_reconciliation import reconcile_result
+
     reconcile_result(limited, exact)
     extra_task = replace(request.tasks[0], task_id=uuid4(), order_id="SECOND")
     two_tasks = replace(limited, tasks=(*limited.tasks, extra_task))
@@ -3232,20 +3291,26 @@ def test_real_vroom_applies_optional_route_limits(database: Engine, tmp_path: Pa
 
 
 def test_published_vehicle_limits_reach_recoverable_run_and_release_on_solver_error(
-    database: Engine, tmp_path: Path,
+    database: Engine,
+    tmp_path: Path,
 ) -> None:
     rows = _publication_rows()
-    rows["vehicles"][0].update({
-        "max_route_distance_meters": "100000",
-        "max_driving_seconds": "10000",
-        "max_delivery_tasks": "1",
-    })
+    rows["vehicles"][0].update(
+        {
+            "max_route_distance_meters": "100000",
+            "max_driving_seconds": "10000",
+            "max_delivery_tasks": "1",
+        }
+    )
     scenario, _, _ = _published_allocation_fixture(database, tmp_path, rows)
     sessions = create_session_factory(database)
     osrm = OsrmClient(OSRM_TEST_URL)
     service = RevisionRunService(
-        sessions, OperationalAllocationService(sessions, osrm), osrm,
-        VroomAdapter(VROOM_TEST_URL), WorkloadLimits(),
+        sessions,
+        OperationalAllocationService(sessions, osrm),
+        osrm,
+        VroomAdapter(VROOM_TEST_URL),
+        WorkloadLimits(),
     )
     queued, _ = service.submit(scenario, 1, "limited-real")
     assert service.process_once()
@@ -3263,7 +3328,8 @@ def test_published_vehicle_limits_reach_recoverable_run_and_release_on_solver_er
 
 
 def test_fractional_time_is_rejected_before_run_or_reservation(
-    database: Engine, tmp_path: Path,
+    database: Engine,
+    tmp_path: Path,
 ) -> None:
     rows = _publication_rows()
     rows["orders"][0]["time_window_start"] = "2026-10-15T09:00:00.000001-03:00"
@@ -3273,13 +3339,14 @@ def test_fractional_time_is_rejected_before_run_or_reservation(
         service.submit(scenario, 1, "fractional-second")
     with create_session_factory(database)() as session:
         assert session.scalar(select(func.count()).select_from(RevisionRunJobModel)) == 0
-        assert session.scalar(select(func.count()).select_from(
-            OperationalInventoryPositionModel
-        )) == 0
+        assert (
+            session.scalar(select(func.count()).select_from(OperationalInventoryPositionModel)) == 0
+        )
 
 
 def test_metrics_multiline_unrouted_plan_survives_cancel_without_changing_facts(
-    database: Engine, tmp_path: Path,
+    database: Engine,
+    tmp_path: Path,
 ) -> None:
     rows = _publication_rows()
     rows["order_lines"].append({**rows["order_lines"][0], "sku": "SECOND"})
@@ -3311,7 +3378,8 @@ def test_metrics_multiline_unrouted_plan_survives_cancel_without_changing_facts(
 
 
 def test_metrics_recovery_fences_timing_and_retains_unknown_interrupted_phase(
-    database: Engine, tmp_path: Path,
+    database: Engine,
+    tmp_path: Path,
 ) -> None:
     scenario, _, _ = _published_allocation_fixture(database, tmp_path)
     service = _revision_run_service(database)
@@ -3333,12 +3401,20 @@ def test_metrics_recovery_fences_timing_and_retains_unknown_interrupted_phase(
         assert session.scalar(select(func.count()).select_from(PlanningTimingEventModel)) == count
     # Database fencing also rejects a direct write from the replaced owner.
     with pytest.raises(DBAPIError), service.sessions.begin() as session:
-        session.add(PlanningTimingEventModel(
-            run_id=first[0], attempt_no=1, owner_token=first[1],
-            kind="PHASE_FINISHED", phase="SOLVER",
-            occurred_at=datetime.now(UTC), duration_ns=1, outcome="SUCCEEDED",
-            calculation_version="processing-v1", details={},
-        ))
+        session.add(
+            PlanningTimingEventModel(
+                run_id=first[0],
+                attempt_no=1,
+                owner_token=first[1],
+                kind="PHASE_FINISHED",
+                phase="SOLVER",
+                occurred_at=datetime.now(UTC),
+                duration_ns=1,
+                outcome="SUCCEEDED",
+                calculation_version="processing-v1",
+                details={},
+            )
+        )
     service._process(*second)
     result = PlanMetricsQuery(service.sessions).get(first[0])
     times = result["processing"]
@@ -3352,7 +3428,8 @@ def test_metrics_recovery_fences_timing_and_retains_unknown_interrupted_phase(
 
 
 def test_metrics_failed_solver_keeps_phases_and_released_stock(
-    database: Engine, tmp_path: Path,
+    database: Engine,
+    tmp_path: Path,
 ) -> None:
     scenario, _, _ = _published_allocation_fixture(database, tmp_path)
     service = _revision_run_service(database, BrokenSolver())
@@ -3371,18 +3448,27 @@ def test_metrics_failed_solver_keeps_phases_and_released_stock(
 
 
 def test_metrics_cancel_running_attempt_has_unknown_end_and_rejects_late_timing(
-    database: Engine, tmp_path: Path,
+    database: Engine,
+    tmp_path: Path,
 ) -> None:
     scenario, _, _ = _published_allocation_fixture(database, tmp_path)
     service = _revision_run_service(database)
     service.submit(scenario, 1, "metric-cancel-running")
     claim = service.claim()
     assert claim is not None
-    service._record_timing(*claim, {"kind": "PHASE_STARTED", "phase": "PREPARE_OSRM",
-                                   "occurred_at": datetime.now(UTC)})
+    service._record_timing(
+        *claim, {"kind": "PHASE_STARTED", "phase": "PREPARE_OSRM", "occurred_at": datetime.now(UTC)}
+    )
     service.cancel(claim[0])
-    service._record_timing(*claim, {"kind": "PHASE_FINISHED", "phase": "PREPARE_OSRM",
-                                   "occurred_at": datetime.now(UTC), "duration_ns": 1})
+    service._record_timing(
+        *claim,
+        {
+            "kind": "PHASE_FINISHED",
+            "phase": "PREPARE_OSRM",
+            "occurred_at": datetime.now(UTC),
+            "duration_ns": 1,
+        },
+    )
     times = PlanMetricsQuery(service.sessions).get(claim[0])["processing"]
     assert times["total_elapsed"]["value"] is not None
     assert times["active_all_attempts"]["value"] is None
@@ -3398,10 +3484,17 @@ def test_metrics_historical_demo_is_read_only_and_does_not_invent_input_or_timin
     run_id = uuid4()
     now = datetime.now(UTC)
     repository.start(run_id, "Historical", now, {"dataset_name": "old"})
-    repository.complete(run_id, now + timedelta(seconds=5), {
-        "status": "SUCCEEDED", "routes": [], "unassigned": [],
-        "summary": {"objective_cost_units": 0, "cost_scale": 100, "currency": "CLP"},
-    }, {"estimated_cost": 0})
+    repository.complete(
+        run_id,
+        now + timedelta(seconds=5),
+        {
+            "status": "SUCCEEDED",
+            "routes": [],
+            "unassigned": [],
+            "summary": {"objective_cost_units": 0, "cost_scale": 100, "currency": "CLP"},
+        },
+        {"estimated_cost": 0},
+    )
     before = repository.get(run_id)
     result = PlanMetricsQuery(sessions).get(run_id)
     assert result["plan"]["metrics"]["valid_input_orders"]["value"] is None
@@ -3421,9 +3514,9 @@ def test_processing_measurement_migration_empty_downgrade_preserves_history_and_
         try:
             with engine.connect() as connection:
                 old_triggers = connection.scalar(text(TRIGGER_COUNT_SQL))
-                postgis = connection.scalar(text(
-                    "SELECT oid FROM pg_extension WHERE extname='postgis'"
-                ))
+                postgis = connection.scalar(
+                    text("SELECT oid FROM pg_extension WHERE extname='postgis'")
+                )
             sessions = create_session_factory(engine)
             run_id = uuid4()
             DatabaseRunRepository(sessions).start(run_id, "Legacy data", datetime.now(UTC), {})
@@ -3431,16 +3524,20 @@ def test_processing_measurement_migration_empty_downgrade_preserves_history_and_
             command.downgrade(Config(str(ALEMBIC_INI)), "e3a1b7c9d240")
             with engine.connect() as connection:
                 assert connection.scalar(text(TRIGGER_COUNT_SQL)) == old_triggers
-                assert connection.scalar(text(
-                    "SELECT oid FROM pg_extension WHERE extname='postgis'"
-                )) == postgis
-                assert connection.scalar(text(
-                    "SELECT to_regclass('planning_timing_events')"
-                )) is None
+                assert (
+                    connection.scalar(text("SELECT oid FROM pg_extension WHERE extname='postgis'"))
+                    == postgis
+                )
+                assert (
+                    connection.scalar(text("SELECT to_regclass('planning_timing_events')")) is None
+                )
                 assert connection.scalar(text("SELECT count(*) FROM planning_runs")) == 1
-                assert connection.scalar(text(
-                    "SELECT to_regprocedure('routeops_guard_timing_event()')"
-                )) is None
+                assert (
+                    connection.scalar(
+                        text("SELECT to_regprocedure('routeops_guard_timing_event()')")
+                    )
+                    is None
+                )
             migrate(monkeypatch, url, "head")
             assert DatabaseRunRepository(sessions).get(run_id) is not None
         finally:
@@ -3448,7 +3545,9 @@ def test_processing_measurement_migration_empty_downgrade_preserves_history_and_
 
 
 def test_processing_measurements_are_immutable_and_refuse_lossy_downgrade(
-    database: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    database: Engine,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     scenario, _, _ = _published_allocation_fixture(database, tmp_path)
     service = _revision_run_service(database)
@@ -3476,7 +3575,8 @@ def test_processing_measurements_are_immutable_and_refuse_lossy_downgrade(
 
 
 def test_demo_failed_persistence_keeps_measured_phase_and_atomic_rollback(
-    database: Engine, monkeypatch: pytest.MonkeyPatch,
+    database: Engine,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sessions = create_session_factory(database)
     repository = DatabaseRunRepository(sessions)
@@ -3491,9 +3591,14 @@ def test_demo_failed_persistence_keeps_measured_phase_and_atomic_rollback(
 
     monkeypatch.setattr(repository, "_geometry", fault)
     with pytest.raises(OSError):
-        repository.complete(run_id, now, {"status": "PARTIAL", "unassigned": [],
-                                         "routes": [{"geometry": []}]}, {},
-                            timer=timer, timing_token=token)
+        repository.complete(
+            run_id,
+            now,
+            {"status": "PARTIAL", "unassigned": [], "routes": [{"geometry": []}]},
+            {},
+            timer=timer,
+            timing_token=token,
+        )
     repository.fail(run_id, datetime.now(UTC), "TEST_FAILURE", timer=timer, timing_token=token)
     result = PlanMetricsQuery(sessions).get(run_id)
     assert result["plan"] is None and result["current_status"] == "FAILED"

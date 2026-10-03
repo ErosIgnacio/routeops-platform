@@ -336,7 +336,8 @@ def evaluate_manual(
                 **r,
                 "departure_policy": MANUAL_DEPARTURE,
                 "departure_at": vehicles[r["vehicle_id"]].shift_start.isoformat()
-                if r["vehicle_id"] in vehicles else None,
+                if r["vehicle_id"] in vehicles
+                else None,
             }
             for r in submitted
         ],

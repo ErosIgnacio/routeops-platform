@@ -153,12 +153,14 @@ class PreparedRevision:
         )
         return OptimizationProblem(
             contract_version=(
-                "1.1" if any(
+                "1.1"
+                if any(
                     vehicle.max_route_distance_meters is not None
                     or vehicle.max_driving_seconds is not None
                     or vehicle.max_delivery_tasks is not None
                     for vehicle in self.vehicles
-                ) else "1.0"
+                )
+                else "1.0"
             ),
             problem_id=run_id,
             scenario_id=self.scenario_id,

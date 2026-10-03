@@ -1,0 +1,11 @@
+{
+  "archive": "santiago-demo.osm.gz",
+  "bytes": 526547,
+  "sha256": "4c59be7a6e262191a6ee59ca190e93b395c37b029683308bf869c97a43fc9f21",
+  "source_lock": "data/osrm/source-lock.json",
+  "source_sha256": "22230c1c093a0fe50bbb240cce3d2c36aaf34e8bfb2fe136b76405084de213c4",
+  "source_bytes": 4145215,
+  "license": "ODbL-1.0",
+  "attribution": "Data \u00a9 OpenStreetMap contributors",
+  "purpose": "Exact reviewed source fixture for clean CI checkouts; no generated OSRM indexes"
+}

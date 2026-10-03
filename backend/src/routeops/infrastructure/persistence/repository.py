@@ -45,25 +45,44 @@ class DatabaseRunRepository:
         completed_at: datetime,
         result: dict[str, Any],
         kpis: dict[str, Any],
-        *, timer: AttemptTimer | None = None, timing_token: UUID | None = None,
+        *,
+        timer: AttemptTimer | None = None,
+        timing_token: UUID | None = None,
     ) -> None:
         persist_start = perf_counter_ns()
         if timer is not None:
-            timer.emit({"kind": "PHASE_STARTED", "phase": "PERSIST_RESULT",
-                        "occurred_at": datetime.now().astimezone()})
+            timer.emit(
+                {
+                    "kind": "PHASE_STARTED",
+                    "phase": "PERSIST_RESULT",
+                    "occurred_at": datetime.now().astimezone(),
+                }
+            )
         try:
             self._complete(run_id, completed_at, result, kpis, timer, timing_token, persist_start)
         except Exception:
             if timer is not None:
-                timer.emit({"kind": "PHASE_FINISHED", "phase": "PERSIST_RESULT",
-                            "occurred_at": datetime.now().astimezone(), "outcome": "FAILED",
-                            "duration_ns": perf_counter_ns() - persist_start,
-                            "details": {"scope": "failed_persistence_call_including_rollback"}})
+                timer.emit(
+                    {
+                        "kind": "PHASE_FINISHED",
+                        "phase": "PERSIST_RESULT",
+                        "occurred_at": datetime.now().astimezone(),
+                        "outcome": "FAILED",
+                        "duration_ns": perf_counter_ns() - persist_start,
+                        "details": {"scope": "failed_persistence_call_including_rollback"},
+                    }
+                )
             raise
 
     def _complete(
-        self, run_id: UUID, completed_at: datetime, result: dict[str, Any], kpis: dict[str, Any],
-        timer: AttemptTimer | None, timing_token: UUID | None, persist_start: int,
+        self,
+        run_id: UUID,
+        completed_at: datetime,
+        result: dict[str, Any],
+        kpis: dict[str, Any],
+        timer: AttemptTimer | None,
+        timing_token: UUID | None,
+        persist_start: int,
     ) -> None:
         with self._sessions.begin() as session:
             run = session.get(PlanningRunModel, run_id)
@@ -99,17 +118,36 @@ class DatabaseRunRepository:
 
             session.flush()
             if timing_token is not None:
-                persist_diagnostics(session, run_id, result_document(result, {
-                    "run_id": str(run_id), "input_sha256": _hash(run.input_data),
-                    "source": "persisted_original_demo_result", "solver": result.get("solver"),
-                }), timing_token, 1)
+                persist_diagnostics(
+                    session,
+                    run_id,
+                    result_document(
+                        result,
+                        {
+                            "run_id": str(run_id),
+                            "input_sha256": _hash(run.input_data),
+                            "source": "persisted_original_demo_result",
+                            "solver": result.get("solver"),
+                        },
+                    ),
+                    timing_token,
+                    1,
+                )
             if timer is not None and timing_token is not None:
-                append_timing(session, run_id, timing_token, 1, {
-                    "kind": "PHASE_FINISHED", "phase": "PERSIST_RESULT",
-                    "occurred_at": datetime.now().astimezone(), "outcome": "SUCCEEDED",
-                    "duration_ns": perf_counter_ns() - persist_start,
-                    "details": {"scope": "through_flush_excludes_final_commit"},
-                })
+                append_timing(
+                    session,
+                    run_id,
+                    timing_token,
+                    1,
+                    {
+                        "kind": "PHASE_FINISHED",
+                        "phase": "PERSIST_RESULT",
+                        "occurred_at": datetime.now().astimezone(),
+                        "outcome": "SUCCEEDED",
+                        "duration_ns": perf_counter_ns() - persist_start,
+                        "details": {"scope": "through_flush_excludes_final_commit"},
+                    },
+                )
                 append_timing(session, run_id, timing_token, 1, timer.finish("READY"))
             run.status = str(result["status"])
             run.completed_at = datetime.now().astimezone() if timer is not None else completed_at
@@ -119,8 +157,13 @@ class DatabaseRunRepository:
             append_timing(session, run_id, token, 1, event)
 
     def fail(
-        self, run_id: UUID, completed_at: datetime, error: str,
-        *, timer: AttemptTimer | None = None, timing_token: UUID | None = None,
+        self,
+        run_id: UUID,
+        completed_at: datetime,
+        error: str,
+        *,
+        timer: AttemptTimer | None = None,
+        timing_token: UUID | None = None,
     ) -> None:
         with self._sessions.begin() as session:
             run = session.get(PlanningRunModel, run_id)
@@ -128,10 +171,20 @@ class DatabaseRunRepository:
                 return
             run.error = error
             if timing_token is not None:
-                persist_diagnostics(session, run_id, failure_document(error, {
-                    "run_id": str(run_id), "input_sha256": _hash(run.input_data),
-                    "source": "synchronous_demo_failure",
-                }), timing_token, 1)
+                persist_diagnostics(
+                    session,
+                    run_id,
+                    failure_document(
+                        error,
+                        {
+                            "run_id": str(run_id),
+                            "input_sha256": _hash(run.input_data),
+                            "source": "synchronous_demo_failure",
+                        },
+                    ),
+                    timing_token,
+                    1,
+                )
             if timer is not None and timing_token is not None:
                 append_timing(session, run_id, timing_token, 1, timer.finish("FAILED"))
             run.status = "FAILED"

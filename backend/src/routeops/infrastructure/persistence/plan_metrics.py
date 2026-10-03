@@ -33,7 +33,7 @@ class PlanMetricsQuery:
 
     def get(self, run_id: UUID, *, snapshot: Session | None = None) -> dict[str, Any]:
         # One repeatable snapshot prevents a simultaneous completion from mixing states.
-        with (nullcontext(snapshot) if snapshot is not None else self.sessions()) as session:
+        with nullcontext(snapshot) if snapshot is not None else self.sessions() as session:
             if snapshot is None:
                 session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
             run = session.get(PlanningRunModel, run_id)

@@ -207,23 +207,23 @@ class VroomAdapter:
             vehicle_skills = {("user", skill) for skill in vehicle.skills}
             vehicle_skills.add(self._center_skill(vehicle.distribution_center_id))
             vehicle_payload: dict[str, Any] = {
-                    "id": reverse_vehicles[vehicle.vehicle_id],
-                    "description": vehicle.source_vehicle_id,
-                    "profile": "car",
-                    "start": [vehicle.start.longitude, vehicle.start.latitude],
-                    "end": [vehicle.end.longitude, vehicle.end.latitude],
-                    "capacity": vehicle.capacity.as_vroom_array(),
-                    "time_window": [
-                        self._relative_seconds(problem, vehicle.shift_start),
-                        self._relative_seconds(problem, vehicle.shift_end),
-                    ],
-                    "skills": sorted(skill_ids[value] for value in vehicle_skills),
-                    "costs": {
-                        "fixed": vehicle.costs.fixed_units,
-                        "per_hour": vehicle.costs.per_duty_hour_units,
-                        "per_km": vehicle.costs.per_km_units,
-                    },
-                }
+                "id": reverse_vehicles[vehicle.vehicle_id],
+                "description": vehicle.source_vehicle_id,
+                "profile": "car",
+                "start": [vehicle.start.longitude, vehicle.start.latitude],
+                "end": [vehicle.end.longitude, vehicle.end.latitude],
+                "capacity": vehicle.capacity.as_vroom_array(),
+                "time_window": [
+                    self._relative_seconds(problem, vehicle.shift_start),
+                    self._relative_seconds(problem, vehicle.shift_end),
+                ],
+                "skills": sorted(skill_ids[value] for value in vehicle_skills),
+                "costs": {
+                    "fixed": vehicle.costs.fixed_units,
+                    "per_hour": vehicle.costs.per_duty_hour_units,
+                    "per_km": vehicle.costs.per_km_units,
+                },
+            }
             if vehicle.max_route_distance_meters is not None:
                 vehicle_payload["max_distance"] = vehicle.max_route_distance_meters
             if vehicle.max_driving_seconds is not None:
@@ -346,9 +346,7 @@ class VroomAdapter:
                 distance_meters=self._as_int(raw_route.get("distance"), "route.distance"),
                 driving_seconds=self._as_int(raw_route.get("duration"), "route.duration"),
                 service_seconds=self._as_int(raw_route.get("service"), "route.service"),
-                waiting_seconds=self._as_int(
-                    raw_route.get("waiting_time"), "route.waiting_time"
-                ),
+                waiting_seconds=self._as_int(raw_route.get("waiting_time"), "route.waiting_time"),
                 total_duration_seconds=self._as_int(raw_route.get("duration"), "route.duration")
                 + self._as_int(raw_route.get("service"), "route.service")
                 + self._as_int(raw_route.get("waiting_time"), "route.waiting_time"),

@@ -178,11 +178,21 @@ class OperationalAllocationPolicy:
                         "window_end": order.time_window_end.isoformat(),
                         "required_skills": sorted(order.required_skills),
                         "required": required,
-                        "demand": {"units": sum(line.quantity for line in order.lines),
-                                   "weight_kg": str(sum((line.quantity * line.unit_weight_kg
-                                                         for line in order.lines), Decimal(0))),
-                                   "volume_m3": str(sum((line.quantity * line.unit_volume_m3
-                                                         for line in order.lines), Decimal(0)))},
+                        "demand": {
+                            "units": sum(line.quantity for line in order.lines),
+                            "weight_kg": str(
+                                sum(
+                                    (line.quantity * line.unit_weight_kg for line in order.lines),
+                                    Decimal(0),
+                                )
+                            ),
+                            "volume_m3": str(
+                                sum(
+                                    (line.quantity * line.unit_volume_m3 for line in order.lines),
+                                    Decimal(0),
+                                )
+                            ),
+                        },
                         "chosen_center_id": chosen,
                         "reason_code": reason,
                         "candidates": candidates,

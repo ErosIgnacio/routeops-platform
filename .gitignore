@@ -28,6 +28,8 @@ frontend/vite.config.js
 frontend/vite.config.d.ts
 
 # Runtime data
+.ci-work/
+.ci-artifacts/
 data/osrm/*.osm
 data/osrm/*.osm.*
 data/osrm/*.osrm

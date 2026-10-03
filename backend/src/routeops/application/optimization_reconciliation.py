@@ -211,9 +211,11 @@ def reconcile_result(
             and route.totals.driving_seconds > vehicle.max_driving_seconds
         ):
             raise SolverResponseError("Solver exceeded vehicle driving time")
-        if vehicle.max_delivery_tasks is not None and sum(
-            step.kind == StepKind.DELIVERY for step in route.steps
-        ) > vehicle.max_delivery_tasks:
+        if (
+            vehicle.max_delivery_tasks is not None
+            and sum(step.kind == StepKind.DELIVERY for step in route.steps)
+            > vehicle.max_delivery_tasks
+        ):
             raise SolverResponseError("Solver exceeded vehicle delivery tasks")
         _reconcile_route_facts(route, assigned, tasks, problem.options.request_geometry)
     for item in result.unassigned:

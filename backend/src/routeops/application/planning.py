@@ -63,27 +63,39 @@ class DemoPlanningService:
                 "allocation_policy": DeterministicAllocationPolicy.version,
                 "map_dataset_sha256": self._map_dataset_sha256,
                 "metric_input_snapshot": {
-                    "orders": {order.id: [order.time_window_start.isoformat(),
-                                          order.time_window_end.isoformat()]
-                               for order in scenario.orders},
-                    "capacities": {vehicle.id: to_primitive(vehicle.capacity)
-                                   for vehicle in scenario.vehicles},
+                    "orders": {
+                        order.id: [
+                            order.time_window_start.isoformat(),
+                            order.time_window_end.isoformat(),
+                        ]
+                        for order in scenario.orders
+                    },
+                    "capacities": {
+                        vehicle.id: to_primitive(vehicle.capacity) for vehicle in scenario.vehicles
+                    },
                 },
                 "operating_cost_rates": {
                     "currency": scenario.currency,
                     "vehicles": {
-                        vehicle.id: {"fixed": str(vehicle.fixed_cost),
-                                     "per_duty_hour": str(vehicle.cost_per_hour),
-                                     "per_km": str(vehicle.cost_per_km)}
+                        vehicle.id: {
+                            "fixed": str(vehicle.fixed_cost),
+                            "per_duty_hour": str(vehicle.cost_per_hour),
+                            "per_km": str(vehicle.cost_per_km),
+                        }
                         for vehicle in scenario.vehicles
                     },
                 },
             },
         )
         token = uuid4()
-        self._repository.record_timing(run_id, token, {
-            "kind": "ATTEMPT_STARTED", "occurred_at": datetime.now(UTC),
-        })
+        self._repository.record_timing(
+            run_id,
+            token,
+            {
+                "kind": "ATTEMPT_STARTED",
+                "occurred_at": datetime.now(UTC),
+            },
+        )
         timer = AttemptTimer(lambda event: self._repository.record_timing(run_id, token, event))
         try:
             with timer.phase("ALLOCATION_OSRM_DEMO"):
@@ -95,12 +107,19 @@ class DemoPlanningService:
             with timer.phase("RECONCILE"):
                 reconcile_result(problem, solver_result)
                 result = self._merge_unassigned(solver_result, allocation.unassigned)
-                result = diagnose_result(result, problem, {}, {
-                    "run_id": str(run_id), "source": "original_demo_decision_evidence",
-                    "dataset_name": scenario.dataset_name, "dataset_seed": scenario.dataset_seed,
-                    "policy_version": self._allocation.version,
-                    "map_dataset_sha256": self._map_dataset_sha256,
-                })
+                result = diagnose_result(
+                    result,
+                    problem,
+                    {},
+                    {
+                        "run_id": str(run_id),
+                        "source": "original_demo_decision_evidence",
+                        "dataset_name": scenario.dataset_name,
+                        "dataset_seed": scenario.dataset_seed,
+                        "policy_version": self._allocation.version,
+                        "map_dataset_sha256": self._map_dataset_sha256,
+                    },
+                )
             completed_at = datetime.now(UTC)
             kpis = self._kpis(result)
             self._repository.complete(
@@ -108,11 +127,17 @@ class DemoPlanningService:
                 completed_at,
                 to_primitive(result),
                 kpis,
-                timer=timer, timing_token=token,
+                timer=timer,
+                timing_token=token,
             )
         except Exception as exc:
-            self._repository.fail(run_id, datetime.now(UTC), operational_failure_code(exc),
-                                  timer=timer, timing_token=token)
+            self._repository.fail(
+                run_id,
+                datetime.now(UTC),
+                operational_failure_code(exc),
+                timer=timer,
+                timing_token=token,
+            )
             raise
         persisted = self._repository.get(run_id)
         if persisted is None:

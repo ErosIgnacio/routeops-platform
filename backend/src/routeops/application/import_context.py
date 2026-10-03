@@ -58,7 +58,8 @@ class ValidationContext:
         ):
             raise ValueError("CONTEXT_CURRENCY_INVALID")
         if (self.contract_version, self.validator_version) not in (
-            (CONTRACT_VERSION, VALIDATOR_VERSION), LEGACY_VERSIONS
+            (CONTRACT_VERSION, VALIDATOR_VERSION),
+            LEGACY_VERSIONS,
         ):
             raise ValueError("CONTEXT_VERSION_INVALID")
         if self.operational_area is not None:

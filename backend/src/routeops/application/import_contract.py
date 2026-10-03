@@ -70,8 +70,11 @@ SCHEMA: dict[str, tuple[Field, ...]] = {
         Field("cost_per_hour", "decimal", decimal_places=4, scale_places=4),
         Field("cost_per_km", "decimal", decimal_places=4, scale_places=4),
         Field(
-            "max_route_distance_meters", "integer", required=False,
-            minimum=1, maximum=2_147_483_647,
+            "max_route_distance_meters",
+            "integer",
+            required=False,
+            minimum=1,
+            maximum=2_147_483_647,
         ),
         Field("max_driving_seconds", "integer", required=False, minimum=1, maximum=2_147_483_647),
         Field("max_delivery_tasks", "integer", required=False, minimum=1, maximum=2_147_483_647),
