@@ -11,6 +11,7 @@ from pathlib import Path
 
 from check_junit import verify
 from prepare_map import restore
+from sanitize_reports import sanitize
 
 
 class MapContracts(unittest.TestCase):
@@ -78,6 +79,32 @@ class EvidenceContracts(unittest.TestCase):
                 '<testsuites><testsuite tests="2" failures="0" skipped="0"/></testsuites>'
             )
             self.assertEqual(verify(report), 2)
+
+
+class ReportContracts(unittest.TestCase):
+    def test_readonly_report_is_replaced_and_secret_is_removed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = root / "integration.xml"
+            report.write_text(
+                '<testsuite tests="1"><system-out>ci-password</system-out></testsuite>'
+            )
+            report.chmod(0o444)
+            original_inode = report.stat().st_ino
+            sanitize(root, "ci-password")
+            self.assertNotEqual(report.stat().st_ino, original_inode)
+            self.assertNotIn("ci-password", report.read_text())
+            self.assertTrue((root / "sanitized.ok").exists())
+            self.assertEqual(list(root.glob("*.redacted")), [])
+
+    def test_failed_redaction_cannot_leave_upload_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sanitized.ok").write_text("old result")
+            (root / "broken.txt").write_bytes(b"\xff")
+            with self.assertRaises(UnicodeDecodeError):
+                sanitize(root, "secret")
+            self.assertFalse((root / "sanitized.ok").exists())
 
 
 if __name__ == "__main__":

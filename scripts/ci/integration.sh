@@ -16,14 +16,7 @@ cleanup() {
   # Logs are synthetic; redact the ephemeral credential before saving artifacts.
   "${compose[@]}" logs --no-color 2>&1 | sed "s/$password/[REDACTED]/g" > .ci-artifacts/compose.txt || true
   "${compose[@]}" ps -a > .ci-artifacts/services.txt || true
-  ROUTEOPS_CI_SECRET="$password" python - <<'PY' || status=1
-import os
-from pathlib import Path
-for path in Path('.ci-artifacts').iterdir():
-    if path.suffix in ('.xml', '.txt'):
-        text = path.read_text(encoding='utf-8')
-        path.write_text(text.replace(os.environ['ROUTEOPS_CI_SECRET'], '[REDACTED]'), encoding='utf-8')
-PY
+  ROUTEOPS_CI_SECRET="$password" python scripts/ci/sanitize_reports.py || status=1
   if ! "${compose[@]}" down --volumes --remove-orphans; then status=1; fi
   rm -f .ci-work/ci.env
   exit "$status"

@@ -71,6 +71,9 @@ los datos locales quedan fuera del proyecto de comprobación.
 
 El trap captura diagnóstico, oculta la contraseña en consola y archivos de
 informe, retira solo ese proyecto con sus volúmenes y borra su env efímero.
+El saneamiento reemplaza archivos atómicamente para admitir informes de otro
+UID sin ampliar permisos. Solo deja `sanitized.ok` si termina; la subida de
+integración exige esa señal y no publica informes sin sanear tras un fallo.
 Un fallo de retirada falla la ejecución. No hay prune global, limpieza de
 volúmenes ajenos ni modificación de escenarios anteriores. Si el proceso
 recibe SIGKILL no puede ejecutar trap: el runner alojado se descarta; localmente
@@ -107,13 +110,14 @@ casos mediante SolverGateway real; no se renombran pruebas comunes como
 observaciones visuales específicas. En exportación se reutilizan comparación
 B2B factible y presión B2C, verificando métricas, restricciones y stock intacto.
 No se añade una suite duplicada ni porcentaje arbitrario para estos criterios.
-Cinco pruebas nuevas protegen checksum/expansión/salida parcial, no sobrescritura,
-restauración repetida y el rechazo de JUnit vacío o con omisiones/fallos.
+Siete pruebas nuevas protegen checksum/expansión/salida parcial, no sobrescritura,
+restauración repetida, rechazo de JUnit vacío/con omisiones/fallos y saneamiento
+atómico de informes de solo lectura sin dejar una señal de subida tras error.
 
 ## Comprobación local y estado de evidencia
 
 Comprobado durante 4.1 en Linux/Python 3.14.7: 213 unitarias aprobadas,
-cinco contratos CI, Ruff y mypy estricto sobre 72 módulos. La incorporación
+siete contratos CI, Ruff y mypy estricto sobre 72 módulos. La incorporación
 del gate de formato requirió reformatear 25 archivos Python existentes; se
 contrastó su AST antes/después con UTF-8 explícito, sin cambios ejecutables.
 No hay migración nueva, cambio de política de asignación ni contrato del solver.
@@ -135,6 +139,15 @@ artefactos descargados y contrastados con sus SHA oficiales: 213 unitarias y
 las 332 pruebas. Integración no llegó a ejecutarlas: Vite devolvió HTTP 403 al
 hostname interno frontend. Se agrega únicamente ese hostname en el overlay CI,
 conforme al mecanismo documentado; todos sus recursos descartables se retiraron.
+
+Tercera ejecución: [37149988881](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37149988881),
+commit `61a3a8ec905ef9f587e87331c7d289fcc0d4ac03`. Las 119 integraciones aprobaron,
+sin fallos/omisiones, en 198.028 s; backend/frontend también. Las cinco páginas
+respondieron HTTP 200 y la API ready; se produjo smoke.txt. El workflow falló
+después por PermissionError al reescribir el JUnit de otro UID durante saneamiento;
+no se considera ejecución integral aprobada. Se corrige con reemplazo atómico
+y subida condicionada al saneamiento completo, sin chmod/chown ni reducción
+de expectativas. Los recursos del proyecto efímero se retiraron igualmente.
 
 En Linux, desde checkout limpio, con Docker/Compose, Python, Bash, curl y jq:
 

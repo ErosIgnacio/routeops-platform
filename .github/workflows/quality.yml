@@ -90,7 +90,7 @@ jobs:
           python-version: '3.14.7'
       - run: bash scripts/ci/integration.sh
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        if: always()
+        if: always() && hashFiles('.ci-artifacts/sanitized.ok') != ''
         with:
           name: integration-${{ github.sha }}
           path: |
