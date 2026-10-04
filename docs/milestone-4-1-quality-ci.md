@@ -1,10 +1,12 @@
 # Entrega 4.1 — calidad automatizada y CI reproducible
 
-Implementación para revisión en `feat/m4-1-quality-ci`, desde Hito 3
-`c308bfb5224edf8268102cafd813faa8e9d5f206`. Sin integración en main ni etiqueta.
-Los commits de avance publicados no implican aceptación: el resultado efectivo
-de cada commit y sus informes están en [GitHub Actions](https://github.com/ErosIgnacio/routeops-platform/actions/workflows/quality.yml).
-El informe de entrega identifica la ejecución y SHA comprobados. 4.2/4.3 no iniciadas.
+Aceptación técnica formal del usuario el **2026-10-04** sobre el commit funcional
+`f7582f0dc9f936fe2b93da291df9d47016dd01d9`, en `feat/m4-1-quality-ci`, desde Hito 3
+`c308bfb5224edf8268102cafd813faa8e9d5f206`. Cierre documental y publicación por
+fast-forward autorizados, conservando la rama y todas las etiquetas.
+La limpieza local pendiente registrada abajo no condiciona este cierre.
+Los resultados e informes están en [GitHub Actions](https://github.com/ErosIgnacio/routeops-platform/actions/workflows/quality.yml).
+4.2 se inicia después de verificar la publicación; 4.3 permanece pendiente.
 
 ## Trabajos y disparadores
 
@@ -148,6 +150,72 @@ después por PermissionError al reescribir el JUnit de otro UID durante saneamie
 no se considera ejecución integral aprobada. Se corrige con reemplazo atómico
 y subida condicionada al saneamiento completo, sin chmod/chown ni reducción
 de expectativas. Los recursos del proyecto efímero se retiraron igualmente.
+
+### Resultado integral comprobado
+
+[Ejecución 37150811990](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37150811990)
+aprobada sobre `f7582f0dc9f936fe2b93da291df9d47016dd01d9`: los tres trabajos
+terminaron SUCCESS. Se descargaron sus tres artefactos, verificando SHA-256
+contra el digest publicado por GitHub, apertura del ZIP y contenido de los JUnit.
+
+| Comprobación | Resultado comprobado |
+|---|---|
+| Formato y Ruff | Aprobados, incluidos src/tests/migrations/herramientas CI |
+| mypy estricto | Aprobado, 72 módulos |
+| Unitarias backend | 213, cero errores/fallos/omisiones; JUnit 4.644 s |
+| Contratos de herramientas CI | 7 aprobados, comprobados también en el log del trabajo |
+| Integración PostgreSQL/PostGIS y servicios reales | 119, cero errores/fallos/omisiones; JUnit 213.663 s |
+| Frontend | 36, cero errores/fallos/omisiones |
+| TypeScript y build | Aprobados; Vite conserva la advertencia conocida de tamaño |
+| Compose, mapa y aplicación | Config válida, fuente exacta y car/MLD reales; API ready y cinco páginas HTTP 200 |
+| Smoke original | Dos rutas, cuatro asignados, uno sin asignar; informe de la corrida sintética 8fb95ccd-24ab-48d4-9272-d0cb2c55499b |
+| Retirada del stack GitHub | Nueve servicios, comprobadores de un solo uso, red y dos volúmenes exclusivos retirados |
+
+Las 213 unitarias y 119 integraciones suman las 332 pruebas backend existentes,
+sin duplicarlas dentro de esa ejecución; los siete contratos CI se cuentan aparte.
+Los tiempos de JUnit describen esta muestra de pruebas, no rendimiento del solver
+ni objetivos de capacidad. La ejecución conserva el smoke original y los casos
+reales B2B/B2C; no se repitió una revisión visual ni las suites después de este
+ajuste exclusivamente documental.
+
+Copias locales recuperadas en `.ci-artifacts/run-37150811990`, fuera de los
+candidatos; `.ci-artifacts/final-validation.json` resume SHA, trabajos, tiempos
+e inventario de artefactos. La evidencia efectiva sigue siendo la ejecución de
+GitHub y sus informes; los artefactos caducan a los 14 días.
+
+### Limpieza local pendiente por revisión automática
+
+La comprobación dirigida retiró correctamente `routeops-m41-frontend-host-check`.
+La llamada posterior combinada para identificar y retirar el comprobador local,
+su imagen y la copia restaurada de mapa fue rechazada antes de ejecutarse:
+`blocked by policy`, sin razón más específica disponible. No se reintentó la
+eliminación mediante otro mecanismo ni se cambiaron políticas.
+
+La inspección de solo lectura confirmó que permanecen:
+
+- Contenedor `routeops-m41-checks`, ID
+  `097f06c5c403de7c8ce50f779616d393356f34584fc31c6e1cebdfce14c8c9f5`,
+  comando de espera de comprobaciones, sin pertenecer al proyecto operacional.
+- Imagen propia `routeops-m41-checks:review`.
+- `.ci-work/osrm/santiago-demo.osm`, copia de 4 145 215 bytes restaurada y
+  verificada; no es la fuente ni los índices operacionales de `data/osrm`.
+
+La retirada de esos tres elementos sigue pendiente; no se declara completada.
+Los informes se conservan y no hay configuración CI con contraseña pendiente
+en `.ci-work`. Los nueve servicios locales, volúmenes, .env, originales privados,
+fuente/índices operacionales y datos históricos se conservan.
+El cierre agrega únicamente documentación tras el commit funcional comprobado.
+No se repiten suites localmente por estos ajustes. El push genera una nueva
+ejecución automática de CI, cuyo resultado debe comprobarse antes de integrar.
+
+## Archivos de la entrega
+
+El diff real contra main contiene 42 archivos: 25 Python existentes ajustados
+solo por el formateador; workflow, imagen/contexto CI, overlay, fixture/lock de
+mapa, seis herramientas Python/Bash, gitignore/gitattributes y documentación.
+La lista exacta con sus hashes se conserva en `.ci-artifacts/candidate-files.json`.
+No hay cambios frontend funcionales, dependencias nuevas ni migración nueva.
+El cierre autoriza integrar en main; no retira ramas ni crea o mueve etiquetas.
 
 En Linux, desde checkout limpio, con Docker/Compose, Python, Bash, curl y jq:
 

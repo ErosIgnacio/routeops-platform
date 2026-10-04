@@ -12,8 +12,8 @@ orders, stock and business identifiers are synthetic.
 > Milestone 3 (`v0.3.0`), accepted on 2026-10-03, adds constraints, estimated
 > operating costs, KPIs, diagnostics, manual comparisons and exports.
 > [Acceptance and evidence](docs/milestone-3-final-review.md) distinguish browser,
-> API, automated and independent-reader checks. Delivery 4.1 (quality/CI) is under
-> review; 4.2 and 4.3 have not started.
+> API, automated and independent-reader checks. Delivery 4.1 (quality/CI) was
+> technically accepted on 2026-10-04. Delivery 4.2 is authorized; 4.3 remains pending.
 
 ![Original Santiago demo: two routes from separate centers](docs/images/original-routes.jpg)
 
@@ -163,8 +163,11 @@ Final 3.3 records contain **332 backend tests** (213 unit, 119 integration) and
 and migration checks. Integrations use real PostgreSQL/PostGIS and OSRM/VROOM.
 Browser observations and independent export readers are separate in the
 [3.3 report](docs/milestone-3-3-analytics-exports.md). These are local results;
-Delivery 4.1 adds the [GitHub Actions quality workflow](.github/workflows/quality.yml)
-and [local/CI runbook](docs/milestone-4-1-quality-ci.md) on its review branch.
+Accepted Delivery 4.1 adds the [GitHub Actions quality workflow](.github/workflows/quality.yml)
+and [local/CI runbook](docs/milestone-4-1-quality-ci.md). Its functional commit
+`f7582f0` passed all three CI jobs, including 332 backend and 36 frontend tests.
+Three identified local check resources await cleanup after a recorded policy
+rejection; this does not condition the authorized technical closure.
 Its execution status and downloadable reports are available in
 [GitHub Actions](https://github.com/ErosIgnacio/routeops-platform/actions/workflows/quality.yml).
 
@@ -222,9 +225,9 @@ Host execution uses loopback service addresses; Compose uses service names.
   Independent readers were checked, not native Excel or every browser/device.
 - Frontend bundle and Starlette/httpx warnings remain documented.
 
-**Milestone 4:** quality/CI (4.1) is under review. Further benchmark and resource
-hardening (4.2), final runbooks, backup/reset guidance and portfolio preparation
-(4.3) remain pending.
+**Milestone 4:** quality/CI (4.1) is technically accepted. Reproducible performance
+and basic security (4.2) is authorized next; final runbooks, backup/reset guidance
+and portfolio preparation (4.3) remain pending.
 No separate RouteEngine is introduced in this delivery.
 
 ## License and map attribution
