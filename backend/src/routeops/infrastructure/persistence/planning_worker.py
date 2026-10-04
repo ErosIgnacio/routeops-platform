@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import time
 
 from routeops.infrastructure.config import Settings
+from routeops.infrastructure.logging import configure_logging
 from routeops.infrastructure.persistence.operational_allocation import OperationalAllocationService
 from routeops.infrastructure.persistence.revision_runs import RevisionRunService
 from routeops.infrastructure.persistence.session import (
@@ -22,7 +22,7 @@ def main() -> int:
     parser.add_argument("--loop", action="store_true")
     options = parser.parse_args()
     settings = Settings.from_environment()
-    logging.basicConfig(level=settings.log_level)
+    configure_logging(settings.log_level)
     engine = create_database_engine(settings.database_url)
     sessions = create_session_factory(engine)
     osrm = OsrmClient(

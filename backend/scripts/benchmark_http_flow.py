@@ -42,11 +42,15 @@ SERVICES = (
 )
 
 
-def _planning_files(folder: Path) -> dict[str, Path]:
-    """Create the accepted 20/60/4/6 synthetic planning workload as five CSVs."""
+def _planning_files(
+    folder: Path, *, orders: int = 20, centers: int = 4, vehicles: int = 6
+) -> dict[str, Path]:
+    """Create a bounded sample; default preserves the accepted 20/60/4/6 fixture."""
+    if not (1 <= orders <= 20 and 1 <= centers <= 4 and 1 <= vehicles <= 6):
+        raise ValueError("sample exceeds current planning dimensions")
     paths = {name: folder / f"{name}.csv" for name in DATASETS}
     rows: dict[str, list[dict[str, str]]] = {name: [] for name in DATASETS}
-    for center_index in range(4):
+    for center_index in range(centers):
         center = f"CD-{center_index}"
         rows["distribution_centers"].append(
             {
@@ -69,11 +73,11 @@ def _planning_files(folder: Path) -> dict[str, Path]:
                     "safety_stock_quantity": "0",
                 }
             )
-    for vehicle_index in range(6):
+    for vehicle_index in range(vehicles):
         rows["vehicles"].append(
             {
                 "vehicle_id": f"VEH-{vehicle_index:02d}",
-                "distribution_center_id": f"CD-{vehicle_index % 4}",
+                "distribution_center_id": f"CD-{vehicle_index % centers}",
                 "vehicle_type": "van",
                 "capacity_units": "200",
                 "capacity_weight_kg": "1000",
@@ -86,7 +90,7 @@ def _planning_files(folder: Path) -> dict[str, Path]:
                 "cost_per_km": "1",
             }
         )
-    for order_index in range(20):
+    for order_index in range(orders):
         order = f"BENCH-{order_index:03d}"
         rows["orders"].append(
             {

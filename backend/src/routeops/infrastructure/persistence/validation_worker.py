@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import time
 
 from routeops.infrastructure.config import Settings
+from routeops.infrastructure.logging import configure_logging
 from routeops.infrastructure.persistence.import_validation_jobs import ValidationJobService
 from routeops.infrastructure.persistence.session import (
     create_database_engine,
@@ -20,7 +20,7 @@ def main() -> None:
     parser.add_argument("--loop", action="store_true")
     args = parser.parse_args()
     settings = Settings.from_environment()
-    logging.basicConfig(level=settings.log_level)
+    configure_logging(settings.log_level)
     engine = create_database_engine(settings.database_url)
     worker = ValidationJobService(
         create_session_factory(engine),

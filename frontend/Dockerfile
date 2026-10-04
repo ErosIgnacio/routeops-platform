@@ -2,11 +2,13 @@ FROM node:24.21.0-bookworm-slim
 
 ENV NODE_ENV=development
 WORKDIR /app
+RUN chown node:node /app
+USER node
 
-COPY package.json package-lock.json ./
+COPY --chown=node:node package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
-COPY . .
+COPY --chown=node:node . .
 
 EXPOSE 5173
 

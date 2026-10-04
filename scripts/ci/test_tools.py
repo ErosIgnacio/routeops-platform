@@ -82,6 +82,15 @@ class EvidenceContracts(unittest.TestCase):
 
 
 class ReportContracts(unittest.TestCase):
+    def test_benchmark_json_is_sanitized_before_upload(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = root / "benchmark-http.json"
+            report.write_text('{"synthetic": "ci-password"}')
+            sanitize(root, "ci-password")
+            self.assertEqual(json.loads(report.read_text()), {"synthetic": "[REDACTED]"})
+            self.assertTrue((root / "sanitized.ok").exists())
+
     def test_readonly_report_is_replaced_and_secret_is_removed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

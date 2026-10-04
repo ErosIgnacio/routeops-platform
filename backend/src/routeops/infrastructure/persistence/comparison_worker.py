@@ -1,10 +1,10 @@
 """Recoverable PostgreSQL worker for analytic comparisons, with no reservations."""
 
 import argparse
-import logging
 import time
 
 from routeops.infrastructure.config import Settings
+from routeops.infrastructure.logging import configure_logging
 from routeops.infrastructure.persistence.plan_comparisons import PlanComparisonService
 from routeops.infrastructure.persistence.session import (
     create_database_engine,
@@ -19,7 +19,7 @@ def main() -> int:
     parser.add_argument("--loop", action="store_true")
     args = parser.parse_args()
     settings = Settings.from_environment()
-    logging.basicConfig(level=settings.log_level)
+    configure_logging(settings.log_level)
     engine = create_database_engine(settings.database_url)
     osrm = OsrmClient(
         settings.osrm_url, settings.http_connect_timeout_seconds, settings.http_read_timeout_seconds

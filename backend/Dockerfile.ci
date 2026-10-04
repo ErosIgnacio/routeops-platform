@@ -8,5 +8,6 @@ COPY pyproject.toml alembic.ini ./
 COPY src ./src
 COPY migrations ./migrations
 COPY tests ./tests
+COPY scripts ./scripts
 COPY data ./data
 CMD ["python", "-m", "pytest", "-m", "integration"]

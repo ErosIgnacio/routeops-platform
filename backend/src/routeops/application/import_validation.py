@@ -543,10 +543,11 @@ class _CheckedXmlStream:
 
     def read(self, size: int = -1) -> bytes:
         chunk = self.stream.read(size)
-        sample = (self.tail + chunk).upper()
+        # Null-separated UTF-16/32 must not bypass the DTD/entity guard.
+        sample = (self.tail + chunk).replace(b"\x00", b"").upper()
         if b"<!DOCTYPE" in sample or b"<!ENTITY" in sample:
             raise ValueError("XLSX_INVALID")
-        self.tail = sample[-16:]
+        self.tail = (self.tail + chunk)[-64:]
         return chunk
 
 
@@ -562,7 +563,8 @@ def _xml_root(archive: zipfile.ZipFile, path: str, max_bytes: int) -> ET.Element
     if archive.getinfo(path).file_size > max_bytes:
         raise ValueError("XLSX_EXPANSION_LIMIT")
     payload = archive.read(path)
-    if b"<!DOCTYPE" in payload.upper() or b"<!ENTITY" in payload.upper():
+    normalized = payload.replace(b"\x00", b"").upper()
+    if b"<!DOCTYPE" in normalized or b"<!ENTITY" in normalized:
         raise ValueError("XLSX_INVALID")
     return ET.fromstring(payload)
 

@@ -33,10 +33,12 @@ class Settings:
     planning_max_attempts: int
     planning_poll_seconds: int
     planning_max_snap_distance_m: float
+    allowed_hosts: tuple[str, ...]
+    max_json_body_bytes: int
 
     @classmethod
     def from_environment(cls) -> Settings:
-        origins = os.getenv("ROUTEOPS_CORS_ORIGINS", "http://localhost:5173")
+        origins = os.getenv("ROUTEOPS_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
         database_url = os.getenv("ROUTEOPS_DATABASE_URL")
         if not database_url:
             raise RuntimeError("ROUTEOPS_DATABASE_URL must be configured")
@@ -112,4 +114,13 @@ class Settings:
             planning_max_attempts=planning_attempts,
             planning_poll_seconds=planning_poll,
             planning_max_snap_distance_m=max_snap_distance_m,
+            allowed_hosts=tuple(
+                item.strip()
+                for item in os.getenv(
+                    "ROUTEOPS_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1],backend"
+                ).split(",")
+                if item.strip()
+            )
+            + (("testserver",) if os.getenv("ROUTEOPS_ENV") == "test" else ()),
+            max_json_body_bytes=1_048_576,
         )

@@ -13,7 +13,9 @@ def sanitize(directory: Path, secret: str) -> None:
     if not secret:
         raise ValueError("Missing ephemeral CI secret")
     for path in directory.iterdir():
-        if path.suffix not in (".xml", ".txt"):
+        if path.suffix not in (".xml", ".txt") and not (
+            path.suffix == ".json" and path.name.startswith("benchmark-")
+        ):
             continue
         text = path.read_text(encoding="utf-8").replace(secret, "[REDACTED]")
         descriptor, name = tempfile.mkstemp(dir=directory, suffix=".redacted")

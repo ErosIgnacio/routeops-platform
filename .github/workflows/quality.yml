@@ -5,6 +5,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      benchmarks:
+        description: 'Run repeated isolated HTTP performance samples after integration'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,9 +35,11 @@ jobs:
       - name: Format, lint and strict typing
         working-directory: backend
         run: |
-          ruff format --check src tests migrations ../scripts/ci
-          ruff check src tests migrations ../scripts/ci
+          ruff format --check src tests migrations ../scripts/ci ../scripts/security scripts/benchmark_acceptance.py scripts/benchmark_http_flow.py
+          ruff check src tests migrations ../scripts/ci ../scripts/security scripts/benchmark_acceptance.py scripts/benchmark_http_flow.py
           mypy src
+      - name: Python dependency advisory snapshot
+        run: python scripts/security/audit_dependencies.py --output .ci-artifacts/dependency-python.json
       - name: Unit tests and CI-tool contracts
         run: |
           mkdir -p .ci-artifacts
@@ -44,7 +51,9 @@ jobs:
         if: always()
         with:
           name: backend-${{ github.sha }}
-          path: .ci-artifacts/*.xml
+          path: |
+            .ci-artifacts/*.xml
+            .ci-artifacts/dependency-python.json
           retention-days: 14
           if-no-files-found: error
           include-hidden-files: true # Only the explicit report patterns above.
@@ -68,11 +77,16 @@ jobs:
       - run: python3 scripts/ci/check_junit.py .ci-artifacts/frontend.xml
       - run: npx tsc --noEmit && npm run build
         working-directory: frontend
+      - name: Frontend dependency advisory snapshot
+        working-directory: frontend
+        run: npm audit --json --package-lock-only --ignore-scripts > ../.ci-artifacts/dependency-frontend.json
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
           name: frontend-${{ github.sha }}
-          path: .ci-artifacts/*.xml
+          path: |
+            .ci-artifacts/*.xml
+            .ci-artifacts/dependency-frontend.json
           retention-days: 14
           if-no-files-found: error
           include-hidden-files: true # No .env or private sources match this path.
@@ -89,6 +103,8 @@ jobs:
         with:
           python-version: '3.14.7'
       - run: bash scripts/ci/integration.sh
+        env:
+          ROUTEOPS_CI_BENCHMARKS: ${{ (inputs.benchmarks || contains(github.event.head_commit.message, '[benchmarks]')) && 'true' || 'false' }}
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always() && hashFiles('.ci-artifacts/sanitized.ok') != ''
         with:
@@ -96,6 +112,7 @@ jobs:
           path: |
             .ci-artifacts/*.xml
             .ci-artifacts/*.txt
+            .ci-artifacts/benchmark-*.json
           retention-days: 14
           if-no-files-found: error
           include-hidden-files: true # Restricted to sanitized XML/TXT reports.

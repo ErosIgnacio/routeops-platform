@@ -13,7 +13,8 @@ orders, stock and business identifiers are synthetic.
 > operating costs, KPIs, diagnostics, manual comparisons and exports.
 > [Acceptance and evidence](docs/milestone-3-final-review.md) distinguish browser,
 > API, automated and independent-reader checks. Delivery 4.1 (quality/CI) was
-> technically accepted on 2026-10-04. Delivery 4.2 is authorized; 4.3 remains pending.
+> closed and published on 2026-10-04. Delivery 4.2 is in progress on its review
+> branch; 4.3 remains pending.
 
 ![Original Santiago demo: two routes from separate centers](docs/images/original-routes.jpg)
 
@@ -226,9 +227,10 @@ Host execution uses loopback service addresses; Compose uses service names.
 - Frontend bundle and Starlette/httpx warnings remain documented.
 
 **Milestone 4:** quality/CI (4.1) is technically accepted. Reproducible performance
-and basic security (4.2) is authorized next; final runbooks, backup/reset guidance
+and basic security (4.2) is in progress; final runbooks, backup/reset guidance
 and portfolio preparation (4.3) remain pending.
 No separate RouteEngine is introduced in this delivery.
+See [4.2 measurements and security boundaries](docs/milestone-4-2-performance-security.md).
 
 ## License and map attribution
 

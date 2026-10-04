@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -9,13 +10,16 @@ from typing import Annotated, Any, Protocol
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from routeops.api.logging import configure_logging
+from routeops.api.security import LocalRequestGuard, browser_write_origins, request_validation_error
 from routeops.application.diagnostics import validation_diagnostics
 from routeops.application.import_context import (
     CONTRACT_VERSION,
@@ -162,6 +166,13 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "X-Request-ID", "Idempotency-Key"],
 )
+app.add_middleware(
+    LocalRequestGuard,
+    origins=browser_write_origins(settings.cors_origins),
+    max_json_bytes=settings.max_json_body_bytes,
+)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.allowed_hosts))
+app.add_exception_handler(RequestValidationError, request_validation_error)
 
 
 class CreateDemoRunRequest(BaseModel):
@@ -249,7 +260,8 @@ def revision_run_error(
 async def request_observability(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
-    request_id = request.headers.get("X-Request-ID", str(uuid4()))[:100]
+    proposed = request.headers.get("X-Request-ID", "")
+    request_id = proposed if re.fullmatch(r"[A-Za-z0-9._-]{1,100}", proposed) else str(uuid4())
     started = time.perf_counter()
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
@@ -258,7 +270,7 @@ async def request_observability(
         extra={
             "request_id": request_id,
             "method": request.method,
-            "path": request.url.path,
+            "path": getattr(request.scope.get("route"), "path", "[unmatched]"),
             "status_code": response.status_code,
             "elapsed_ms": round((time.perf_counter() - started) * 1000),
         },

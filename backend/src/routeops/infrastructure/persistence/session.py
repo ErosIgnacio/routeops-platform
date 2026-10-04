@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 
 def create_database_engine(database_url: str) -> Engine:
-    return create_engine(database_url, pool_pre_ping=True)
+    return create_engine(database_url, pool_pre_ping=True, hide_parameters=True)
 
 
 def create_session_factory(engine: Engine) -> sessionmaker[Session]:

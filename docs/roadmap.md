@@ -232,7 +232,10 @@ Acceptance criteria:
 
 ## Milestone 4 — portfolio quality
 
-Status: **4.1 technically accepted on 2026-10-04**, functional commit
+Status: **4.1 closed and published on 2026-10-04**, documentary closure
+`3f4a7d6f24b7c174a76feadfff0fbf82db974958` in local/remote main and its branch;
+[CI 37242798198](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37242798198)
+passed automatically after the documentation-only push. Accepted functional commit
 `f7582f0dc9f936fe2b93da291df9d47016dd01d9`, from accepted Hito 3
 `c308bfb5224edf8268102cafd813faa8e9d5f206`. Documentary closure and fast-forward
 publication are authorized; no Milestone 4 tag is authorized. The three local
@@ -244,7 +247,8 @@ Approved deliveries:
    frontend checks, clean Linux Compose integration, migrations, real routing,
    smoke and retained test evidence. See [the CI runbook](milestone-4-1-quality-ci.md).
 2. **4.2 — performance and basic security:** measured resource/performance
-   hardening and security boundaries. Authorized on its own branch after 4.1 closure.
+   hardening and security boundaries. In progress on `feat/m4-2-performance-security`.
+   See [measurements, local boundaries and dependency findings](milestone-4-2-performance-security.md).
 3. **4.3 — documentation, reproduction and portfolio presentation:** final
    runbooks, backup/reset guidance, third-party review and presentation. Not started.
 

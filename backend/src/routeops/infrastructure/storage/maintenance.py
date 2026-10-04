@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from routeops.application.ports.object_storage import ObjectStorageGateway
 from routeops.infrastructure.config import Settings
+from routeops.infrastructure.logging import configure_logging
 from routeops.infrastructure.persistence.models import (
     ImportBatchExpirationModel,
     ImportBatchModel,
@@ -146,7 +147,7 @@ def main() -> int:
     parser.add_argument("--loop", action="store_true", help="repeat at the configured interval")
     args = parser.parse_args()
     settings = Settings.from_environment()
-    logging.basicConfig(level=settings.log_level, format="%(levelname)s %(name)s %(message)s")
+    configure_logging(settings.log_level)
     interval = int(os.getenv("ROUTEOPS_IMPORT_MAINTENANCE_INTERVAL_SECONDS", "3600"))
     if interval <= 0:
         raise ValueError("maintenance interval must be positive")

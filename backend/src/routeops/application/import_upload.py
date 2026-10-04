@@ -25,6 +25,8 @@ if TYPE_CHECKING:
 _NAME = re.compile(r"[^/\\\x00-\x1f\x7f]{1,200}\Z")
 _CSV_NAMES = {f"{name}.csv": name for name in DATASETS}
 _MULTIPART_OVERHEAD = 64 * 1024
+_PART_HEADER_BYTES = 2 * 1024
+_PART_HEADER_COUNT = 8
 
 
 class UploadError(Exception):
@@ -80,20 +82,31 @@ class _Receiver:
         self.header_value = bytearray()
         self.headers: dict[bytes, bytes] = {}
         self.complete = False
+        self.header_bytes = 0
 
     def part_begin(self) -> None:
         if len(self.files) >= len(DATASETS):
             raise UploadError("PACKAGE_INCOMPLETE", 422)
         self.headers = {}
+        self.header_bytes = 0
         self.current_size = 0
 
     def header_field_data(self, data: bytes, start: int, end: int) -> None:
+        self._bound_header(end - start)
         self.header_field.extend(data[start:end])
 
     def header_value_data(self, data: bytes, start: int, end: int) -> None:
+        self._bound_header(end - start)
         self.header_value.extend(data[start:end])
 
+    def _bound_header(self, size: int) -> None:
+        self.header_bytes += size
+        if self.header_bytes > _PART_HEADER_BYTES:
+            raise UploadError("MULTIPART_HEADER_LIMIT", 413)
+
     def header_end(self) -> None:
+        if len(self.headers) >= _PART_HEADER_COUNT:
+            raise UploadError("MULTIPART_HEADER_LIMIT", 413)
         field = bytes(self.header_field).lower()
         if field in self.headers:
             raise UploadError("MULTIPART_INVALID", 400)
@@ -164,6 +177,12 @@ async def receive_package(
     boundary = options.get(b"boundary")
     if content_type != b"multipart/form-data" or not boundary or len(boundary) > 200:
         raise UploadError("MULTIPART_INVALID", 400)
+    length = request.headers.get("content-length")
+    if length is not None:
+        if not length.isascii() or not length.isdecimal() or len(length) > 12:
+            raise UploadError("MULTIPART_INVALID", 400)
+        if int(length) > limits.max_package_bytes + _MULTIPART_OVERHEAD:
+            raise UploadError("PACKAGE_LIMIT", 413)
     receiver = _Receiver(storage, limits)
     parser = MultipartParser(
         boundary,

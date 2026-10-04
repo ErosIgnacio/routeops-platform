@@ -33,3 +33,12 @@ python scripts/ci/check_junit.py .ci-artifacts/integration.xml
 # Reuse the application's existing smoke against this project's ephemeral port.
 backend_address=$("${compose[@]}" port backend 8000)
 bash scripts/smoke.sh "http://$backend_address" > .ci-artifacts/smoke.txt
+if [[ ${ROUTEOPS_CI_BENCHMARKS:-false} == true ]]; then
+  python -m pip install --disable-pip-version-check -r backend/requirements.lock.txt
+  PYTHONPATH=backend/src python backend/scripts/benchmark_acceptance.py \
+    --base-url "http://$backend_address" --project "$project" \
+    --output .ci-artifacts/benchmark-http.json --repetitions 3 --seed 41042
+  PYTHONPATH=backend/src python backend/scripts/benchmark_acceptance.py \
+    --base-url "http://$backend_address" --project "$project" \
+    --output .ci-artifacts/benchmark-import.json --repetitions 3 --seed 41042 --imports-only
+fi
