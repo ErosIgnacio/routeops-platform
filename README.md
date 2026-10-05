@@ -13,8 +13,8 @@ orders, stock and business identifiers are synthetic.
 > operating costs, KPIs, diagnostics, manual comparisons and exports.
 > [Acceptance and evidence](docs/milestone-3-final-review.md) distinguish browser,
 > API, automated and independent-reader checks. Delivery 4.1 (quality/CI) was
-> closed and published on 2026-10-04. Delivery 4.2 is implemented and CI verified on its review
-> branch, pending acceptance; 4.3 remains pending.
+> closed and published on 2026-10-04. Delivery 4.2 (performance/basic security) is
+> technically accepted for local single-user use; 4.3 remains pending.
 
 ![Original Santiago demo: two routes from separate centers](docs/images/original-routes.jpg)
 
@@ -227,15 +227,20 @@ Host execution uses loopback service addresses; Compose uses service names.
 - Frontend bundle and Starlette/httpx warnings remain documented.
 
 **Milestone 4:** quality/CI (4.1) is technically accepted. Reproducible performance
-and basic security (4.2) is implemented and CI verified, pending review; final runbooks, backup/reset guidance
+and basic security (4.2) is technically accepted for local single-user use;
+final runbooks, backup/reset guidance
 and portfolio preparation (4.3) remain pending.
 No separate RouteEngine is introduced in this delivery.
 See [4.2 measurements and security boundaries](docs/milestone-4-2-performance-security.md).
-The [candidate image review](docs/milestone-4-2-image-security-review.md) records
+The [accepted image review](docs/milestone-4-2-image-security-review.md) records
 exact digests, distribution backports, bundled components and residual findings.
 The VROOM wrapper now has a local HTTP guard and a pinned supported Node runtime;
 the solver, routing profile and dataset are preserved. Outstanding advisories
 are documented rather than suppressed; this remains a local single-user system.
+Performance samples are the baseline from `88f5398`, before the final XLSX/HTTP
+mitigations and Node replacement. They do not establish performance of the
+corrected runtime or production capacity. The policy-blocked local cleanup from
+4.1 remains recorded in the delivery reports and does not condition acceptance.
 
 ## License and map attribution
 

@@ -233,7 +233,7 @@ Acceptance criteria:
 ## Milestone 4 — portfolio quality
 
 Status: **4.1 closed and published on 2026-10-04**, documentary closure
-`3f4a7d6f24b7c174a76feadfff0fbf82db974958` in local/remote main and its branch;
+`3f4a7d6f24b7c174a76feadfff0fbf82db974958` in local/remote main and its branch at that closure;
 [CI 37242798198](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37242798198)
 passed automatically after the documentation-only push. Accepted functional commit
 `f7582f0dc9f936fe2b93da291df9d47016dd01d9`, from accepted Hito 3
@@ -247,18 +247,27 @@ Approved deliveries:
    frontend checks, clean Linux Compose integration, migrations, real routing,
    smoke and retained test evidence. See [the CI runbook](milestone-4-1-quality-ci.md).
 2. **4.2 — performance and basic security:** measured resource/performance
-   hardening and security boundaries. Implemented on `feat/m4-2-performance-security`,
-   pending acceptance. Functional commit `88f5398517a5a274ee02a8c986720d01b80833f3`: [CI 37245515724](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37245515724)
+   hardening and security boundaries. Technically accepted for local single-user
+   use on `feat/m4-2-performance-security`. Approved review commit:
+   `fa02d7133bc2bb2f15027960f854eb16e27bcd37`,
+   [CI 37250283674](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37250283674)
+   passed 381 backend/36 frontend tests, eight CI-tool contracts and three Node
+   guard contracts, with migrations and real routing smoke. Earlier benchmark
+   baseline `88f5398517a5a274ee02a8c986720d01b80833f3`: [CI 37245515724](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37245515724)
    passed 350 backend/36 frontend tests, eight CI-tool contracts, real integration
    and 39 measured HTTP samples plus ten warmups. Upstream image advisories
    remain explicitly inventoried; no limits/workers/timeouts were increased.
    See [measurements, local boundaries and dependency findings](milestone-4-2-performance-security.md).
-   The [final candidate image assessment](milestone-4-2-image-security-review.md)
+   The [accepted image assessment](milestone-4-2-image-security-review.md)
    groups 47 priority component families, distinguishes backports and vendors,
    mitigates malformed XLSX Unicode and solver HTTP exposure, and replaces only
    the unsupported VROOM Node executable. Solver/profile/map remain unchanged.
-   Residual advisories and installation-tool findings remain tracked; acceptance
-   is still pending. Existing performance samples precede these mitigations.
+   Residual advisories and installation-tool findings remain tracked; no security
+   certification or public deployment is implied. Existing performance samples
+   precede these mitigations and the Node replacement. Documentary closure uses
+   branch CI followed by fast-forward publication to main and its automatic CI;
+   no manual full-suite or benchmark rerun is required for documentation alone.
+   Keep branches 4.1 and 4.2 until Milestone 4 closes; no new tag is authorized.
 3. **4.3 — documentation, reproduction and portfolio presentation:** final
    runbooks, backup/reset guidance, third-party review and presentation. Not started.
 

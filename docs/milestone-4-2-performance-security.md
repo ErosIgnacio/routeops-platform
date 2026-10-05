@@ -1,11 +1,35 @@
 # Entrega 4.2 — rendimiento reproducible y seguridad básica
 
-Candidata en `feat/m4-2-performance-security`, desde el cierre de 4.1
-`3f4a7d6f24b7c174a76feadfff0fbf82db974958`. No integrada ni aceptada.
+**Aceptada técnicamente para uso local de un usuario**, sobre el commit revisado
+`fa02d7133bc2bb2f15027960f854eb16e27bcd37` de `feat/m4-2-performance-security`.
+Base de integración: cierre de 4.1 `3f4a7d6f24b7c174a76feadfff0fbf82db974958`.
 4.1 quedó publicada por fast-forward tras [CI aprobado](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37242798198).
 Los cambios de cierre de 4.1 eran documentales: las suites solo se repitieron
-automáticamente en GitHub. Main y la rama 4.1 coinciden; las cuatro etiquetas
+automáticamente en GitHub. Al cerrar 4.1, main y su rama coincidían; las cuatro etiquetas
 previas no se movieron. Se conserva la rama 4.1 hasta cerrar el Hito 4.
+
+## Aceptación y cierre documental
+
+El usuario autorizó el cierre e integración de 4.2 para ese alcance local.
+[CI del commit aprobado](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37250283674)
+pasó: 260 unitarias y 121 integraciones (**381 backend**), 36 frontend, ocho
+contratos CI y tres contratos Node, además de formato/Ruff, mypy estricto,
+TypeScript, build, Compose, migraciones y smoke OSRM/VROOM reales.
+Esta aceptación conserva los avisos residuales del
+[informe de imágenes](milestone-4-2-image-security-review.md), sin supresiones ni
+afirmación de ausencia de CVEs. No autoriza exposición pública ni multiusuario.
+
+El cierre añade únicamente documentación y se publica en la rama 4.2; CI
+verifica ese commit y, tras integrar por fast-forward, la publicación de main.
+Sus ejecuciones automáticas quedan identificadas por el commit en GitHub
+Actions y en el reporte de cierre. No se repiten manualmente suites completas
+ni benchmarks por estos ajustes documentales. Ambas ramas 4.1/4.2 y las etiquetas
+anteriores se conservan; no se crea una etiqueta del Hito 4 ni se inicia 4.3.
+No se reintenta la limpieza bloqueada de 4.1 ni se recrean servicios locales.
+
+Las mediciones corresponden al baseline `88f5398517a5a274ee02a8c986720d01b80833f3`,
+**anterior a las últimas mitigaciones XLSX/HTTP y al reemplazo de Node**. No son
+mediciones nuevas del runtime corregido ni una capacidad máxima garantizada.
 
 ## Alcance y fronteras
 
@@ -229,7 +253,7 @@ Ensayo exploratorio Windows: Python 3.14.7, Docker 29.8.1, 16 CPU y 15,4 GiB, co
 - No hay revisión visual nueva ni autenticación: alcance exclusivamente local/un usuario. Las protecciones Origin/Host no sustituyen autorización.
 - Starlette/httpx TestClient mantiene advertencia de deprecación y Vite mantiene la advertencia conocida del tamaño del bundle; pruebas sin omisiones. Una invocación inicial de los contratos CI desde Windows falló al reemplazar un informe de solo lectura (WinError 5); el contrato Linux requerido pasó, ocho pruebas, localmente en contenedor y en GitHub, sin cambiar permisos ni su expectativa.
 
-Las mediciones no revelaron un fallo que requiera aumentar límites o modificar políticas/reservas. Las correcciones se concentran en fronteras locales de entrada/logs/contenedores. 4.2 queda candidata a revisión, no integrada ni aceptada; 4.3 no comenzó.
+Las mediciones no revelaron un fallo que requiera aumentar límites o modificar políticas/reservas. Las correcciones se concentran en fronteras locales de entrada/logs/contenedores. 4.2 está técnicamente aceptada para uso local de un usuario; 4.3 no comenzó.
 
 ## Recursos e incertidumbres conservadas
 
@@ -247,7 +271,7 @@ certificación de seguridad, capacidad máxima garantizada ni inicio de 4.3.
 
 ## Archivos de la entrega
 
-33 archivos respecto de main, incluidos los nuevos. Fuentes, pruebas, configuración
+La primera candidata contenía 33 archivos respecto de la base 4.1, incluidos los nuevos. Fuentes, pruebas, configuración
 y resumen documental; no se versionan originales privados, logs, venv ni
 informes completos de verificación.
 
@@ -256,7 +280,8 @@ fuentes/contratos del wrapper (`infrastructure/vroom/.dockerignore`, `Dockerfile
 `request-guard.cjs`, `request-guard.test.cjs`), el informe de imágenes y
 `docs/research/m42-image-security-assessment.json`. También actualiza seguridad
 XML, sus pruebas, la integración HTTP, Compose, CI y documentación ya enumerados. Son 39 archivos
-en la entrega acumulada respecto de main. Los benchmarks y sus resultados no
+en la entrega acumulada respecto de la base 4.1. El cierre documental modifica
+únicamente README, hoja de ruta y los dos informes de 4.2. Los benchmarks y sus resultados no
 se modificaron ni repitieron; corresponden al baseline previo a Node/guards.
 
 - `.env.example`

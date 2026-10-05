@@ -1,11 +1,13 @@
 # Entrega 4.2 — evaluación de imágenes y componentes
 
 Revisión del 4 de octubre de 2026, con registros UTC del 5 de octubre.
-Entrega candidata en `feat/m4-2-performance-security`, pendiente de aceptación.
+Entrega técnicamente aceptada para uso local de un usuario en
+`feat/m4-2-performance-security`, commit revisado
+`fa02d7133bc2bb2f15027960f854eb16e27bcd37`.
 
 ## Conclusión de cierre
 
-Se recomienda aceptar técnicamente 4.2 para el alcance **local, un usuario y datos
+El usuario aceptó técnicamente 4.2 para el alcance **local, un usuario y datos
 sintéticos/confiables de preparación**. CI del último ajuste funcional pasó.
 No se encontró una vía aplicable conocida que quede sin mitigación y deba
 impedir ese cierre. Esto no equivale a certificar las imágenes libres de CVEs:
@@ -160,8 +162,9 @@ hashes están en el paquete externo.
   121 integraciones = **381 backend**, 36 frontend, ocho contratos de herramientas
   CI y tres contratos Node. JUnit recuperados y hashes de artefactos verificados,
   sin fallos ni omisiones. Ruff/formato, mypy, TypeScript, build y Compose pasaron.
-  El commit documental posterior activa CI automáticamente; sus resultados se
-  registran por separado en la evidencia externa y en la entrega final.
+  [CI del commit documental aprobado `fa02d71`](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37250283674)
+  también pasó. El nuevo cierre documental activa CI en la rama y en main;
+  sus resultados se identifican por commit y se entregan por separado.
   CI ejecuta suites/integración, migraciones y smoke real OSRM/VROOM. No hay
   repetición manual de suites completas ni de benchmarks.
 - Las mediciones previas corresponden a `88f5398`, antes de estas mitigaciones
