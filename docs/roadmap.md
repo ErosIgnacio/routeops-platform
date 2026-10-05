@@ -238,7 +238,7 @@ Status: **4.1 closed and published on 2026-10-04**, documentary closure
 passed automatically after the documentation-only push. Accepted functional commit
 `f7582f0dc9f936fe2b93da291df9d47016dd01d9`, from accepted Hito 3
 `c308bfb5224edf8268102cafd813faa8e9d5f206`. Documentary closure and fast-forward
-publication are authorized; no Milestone 4 tag is authorized. The three local
+publication completed; no Milestone 4 tag is authorized. The three local
 check resources retained after `blocked by policy` do not condition closure.
 
 Approved deliveries:
@@ -247,7 +247,11 @@ Approved deliveries:
    frontend checks, clean Linux Compose integration, migrations, real routing,
    smoke and retained test evidence. See [the CI runbook](milestone-4-1-quality-ci.md).
 2. **4.2 — performance and basic security:** measured resource/performance
-   hardening and security boundaries. In progress on `feat/m4-2-performance-security`.
+   hardening and security boundaries. Implemented on `feat/m4-2-performance-security`,
+   pending acceptance. Functional commit `88f5398517a5a274ee02a8c986720d01b80833f3`: [CI 37245515724](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37245515724)
+   passed 350 backend/36 frontend tests, eight CI-tool contracts, real integration
+   and 39 measured HTTP samples plus ten warmups. Upstream image advisories
+   remain explicitly inventoried; no limits/workers/timeouts were increased.
    See [measurements, local boundaries and dependency findings](milestone-4-2-performance-security.md).
 3. **4.3 — documentation, reproduction and portfolio presentation:** final
    runbooks, backup/reset guidance, third-party review and presentation. Not started.

@@ -1,0 +1,1885 @@
+{
+  "run_id": "37245515724",
+  "ci_url": "https://github.com/ErosIgnacio/routeops-platform/actions/runs/37245515724",
+  "units": "seconds unless field names specify bytes",
+  "groups": [
+    {
+      "model": "B2B",
+      "profile": "small",
+      "format": "csv",
+      "concurrency": 1,
+      "rows": {
+        "orders": 2,
+        "order_lines": 6,
+        "inventory": 3,
+        "distribution_centers": 1,
+        "vehicles": 1
+      },
+      "file_bytes": {
+        "orders.csv": 349,
+        "order_lines.csv": 227,
+        "inventory.csv": 252,
+        "distribution_centers.csv": 121,
+        "vehicles.csv": 289
+      },
+      "file_sha256": {
+        "orders.csv": "57ab272315e32b0b699ac049bba6ae508f38298d75f1229813d1e4060e2f9ebc",
+        "order_lines.csv": "e9b8f562a061c19da9e69c0ba40d68eda4fddfc414e9d6bcd9ce96eb07e6edfc",
+        "inventory.csv": "3f9d9fc1c405cd871c306735471e1bc671657e994d1b2ee5d40aba4bbd5f50de",
+        "distribution_centers.csv": "974671b1b4b61e64b3c5acfcfba9fa3c567e0f4304f4b8056f186aab37a59aba",
+        "vehicles.csv": "118ec9c8892f9cc363558eb9669f187af94a691aef0a3c84870a58e4157b7fd2"
+      },
+      "preparation_seconds": 0.0005603490000112288,
+      "client_sampled_rss_peak_bytes": 87891968,
+      "client_tracemalloc_peak_bytes": 3573508,
+      "variability": {
+        "cancel": {
+          "n": 3,
+          "min": 0.014401042000031339,
+          "median": 0.01602368400000387,
+          "max": 0.019954272000006767,
+          "stdev": 0.0028554291130659837
+        },
+        "comparison_submit": {
+          "n": 3,
+          "min": 0.017947139000000334,
+          "median": 0.01798833699996294,
+          "max": 0.02261204199999156,
+          "stdev": 0.002681469286349611
+        },
+        "export_comparisons_csv": {
+          "n": 3,
+          "min": 0.028549455000018042,
+          "median": 0.028766633999964597,
+          "max": 0.03030488699999978,
+          "stdev": 0.0009569857641482894
+        },
+        "export_comparisons_xlsx": {
+          "n": 3,
+          "min": 0.11601705200001788,
+          "median": 0.12171390299999985,
+          "max": 0.19950246000001925,
+          "stdev": 0.0466428398584891
+        },
+        "export_runs_csv": {
+          "n": 3,
+          "min": 0.01803085500000634,
+          "median": 0.018034786999976404,
+          "max": 0.02043649400002323,
+          "stdev": 0.0013877626461983065
+        },
+        "export_runs_xlsx": {
+          "n": 3,
+          "min": 0.045292606000032265,
+          "median": 0.04907711900000322,
+          "max": 0.04995421199998873,
+          "stdev": 0.002477310412403031
+        },
+        "planning_submit": {
+          "n": 3,
+          "min": 0.015165062999983547,
+          "median": 0.017407779999984996,
+          "max": 0.018160989999955746,
+          "stdev": 0.0015584545461938594
+        },
+        "publication_with_replay": {
+          "n": 3,
+          "min": 0.02138012300002856,
+          "median": 0.022612563999985014,
+          "max": 0.025594254999987243,
+          "stdev": 0.00216672950745833
+        },
+        "scenario": {
+          "n": 3,
+          "min": 0.005076529999996637,
+          "median": 0.005253113999970083,
+          "max": 0.01422356400001945,
+          "stdev": 0.00523081233509681
+        },
+        "upload": {
+          "n": 3,
+          "min": 0.013544019999983448,
+          "median": 0.01382365399996388,
+          "max": 0.12131626800004369,
+          "stdev": 0.062141770303517245
+        },
+        "validation_submit": {
+          "n": 3,
+          "min": 0.010784061999970618,
+          "median": 0.01164525000001504,
+          "max": 0.01637558300001274,
+          "stdev": 0.0030106146148862413
+        }
+      },
+      "samples": 3,
+      "validation_observed_seconds": {
+        "n": 3,
+        "min": 3.754768241000022,
+        "median": 4.1635829990000275,
+        "max": 4.365543043000002,
+        "stdev": 0.3111706992657433
+      },
+      "planning_observed_seconds": {
+        "n": 3,
+        "min": 1.8798274680000304,
+        "median": 2.0917082980000146,
+        "max": 2.3031705629999806,
+        "stdev": 0.21167158198670838
+      },
+      "comparison_observed_seconds": {
+        "n": 3,
+        "min": 3.5619808899999725,
+        "median": 3.567427114000054,
+        "max": 3.5771559810000326,
+        "stdev": 0.007687604696549284
+      },
+      "processing_initial_queue": {
+        "n": 3,
+        "min": 1.685986,
+        "median": 1.883828,
+        "max": 2.055329,
+        "stdev": 0.184827983818288
+      },
+      "processing_active_all_attempts": {
+        "n": 3,
+        "min": 0.123754175,
+        "median": 0.125108289,
+        "max": 0.135889972,
+        "stdev": 0.006650261672329065
+      },
+      "processing_total_elapsed": {
+        "n": 3,
+        "min": 1.814743,
+        "median": 2.01212,
+        "max": 2.195208,
+        "stdev": 0.1902772153543351
+      },
+      "processing_durable_total_elapsed": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_driving_seconds": {
+        "n": 3,
+        "min": 217.0,
+        "median": 217.0,
+        "max": 217.0,
+        "stdev": 0.0
+      },
+      "operational_service_seconds": {
+        "n": 3,
+        "min": 600.0,
+        "median": 600.0,
+        "max": 600.0,
+        "stdev": 0.0
+      },
+      "operational_waiting_seconds": {
+        "n": 3,
+        "min": 0.0,
+        "median": 0.0,
+        "max": 0.0,
+        "stdev": 0.0
+      },
+      "operational_total_duration_seconds": {
+        "n": 3,
+        "min": 817.0,
+        "median": 817.0,
+        "max": 817.0,
+        "stdev": 0.0
+      },
+      "operational_vehicles_used": {
+        "n": 3,
+        "min": 1.0,
+        "median": 1.0,
+        "max": 1.0,
+        "stdev": 0.0
+      },
+      "operational_routed_orders": {
+        "n": 3,
+        "min": 2.0,
+        "median": 2.0,
+        "max": 2.0,
+        "stdev": 0.0
+      },
+      "sampled_container_peak_bytes": {
+        "backend": 112092774,
+        "import-validation-worker": 67559751,
+        "planning-worker": 77489766,
+        "comparison-worker": 77101793,
+        "database": 112617062,
+        "osrm": 6328156,
+        "vroom": 47888465
+      },
+      "sampled_process_rss_peak_bytes": {
+        "backend": 134766592,
+        "import-validation-worker": 86528000,
+        "planning-worker": 96911360,
+        "comparison-worker": 96993280
+      },
+      "memory_samples": 8,
+      "memory_first_at": "2026-10-05T00:01:37.935424+00:00",
+      "memory_last_at": "2026-10-05T00:02:06.813117+00:00"
+    },
+    {
+      "model": "B2C",
+      "profile": "small",
+      "format": "xlsx",
+      "concurrency": 1,
+      "rows": {
+        "orders": 2,
+        "order_lines": 6,
+        "inventory": 3,
+        "distribution_centers": 1,
+        "vehicles": 1
+      },
+      "file_bytes": {
+        "package.xlsx": 3957
+      },
+      "file_sha256": {
+        "package.xlsx": "36610962856bdbf1a016baf6cf08323a1ca6b847acbc4084977332575952f763"
+      },
+      "preparation_seconds": 0.0037872319999792126,
+      "client_sampled_rss_peak_bytes": 89718784,
+      "client_tracemalloc_peak_bytes": 3457386,
+      "variability": {
+        "cancel": {
+          "n": 3,
+          "min": 0.01354708799999571,
+          "median": 0.01358381099998951,
+          "max": 0.019217233999995642,
+          "stdev": 0.003263110962896243
+        },
+        "comparison_submit": {
+          "n": 3,
+          "min": 0.01650108500001579,
+          "median": 0.019307625000010376,
+          "max": 0.021282498000005035,
+          "stdev": 0.0024027310993306357
+        },
+        "export_comparisons_csv": {
+          "n": 3,
+          "min": 0.026553264999961357,
+          "median": 0.027342007000015656,
+          "max": 0.08882727900004284,
+          "stdev": 0.035728405148057196
+        },
+        "export_comparisons_xlsx": {
+          "n": 3,
+          "min": 0.11327911699999049,
+          "median": 0.11496244600004957,
+          "max": 0.11542391500000804,
+          "stdev": 0.00112891604509531
+        },
+        "export_runs_csv": {
+          "n": 3,
+          "min": 0.01822151699997221,
+          "median": 0.01822761700003639,
+          "max": 0.0186721360000206,
+          "stdev": 0.00025842208192295227
+        },
+        "export_runs_xlsx": {
+          "n": 3,
+          "min": 0.04578473000003669,
+          "median": 0.0457896799999844,
+          "max": 0.046817905000011706,
+          "stdev": 0.0005950800693679816
+        },
+        "planning_submit": {
+          "n": 3,
+          "min": 0.013745083999992858,
+          "median": 0.013949932999992143,
+          "max": 0.014230349999991176,
+          "stdev": 0.00024361167782748484
+        },
+        "publication_with_replay": {
+          "n": 3,
+          "min": 0.021795937000035792,
+          "median": 0.02478949700002886,
+          "max": 0.027083164999964993,
+          "stdev": 0.002651323389388931
+        },
+        "scenario": {
+          "n": 3,
+          "min": 0.004551938999952654,
+          "median": 0.004923751000035281,
+          "max": 0.005109656000001905,
+          "stdev": 0.00028397566931046844
+        },
+        "upload": {
+          "n": 3,
+          "min": 0.009816292999971665,
+          "median": 0.009907352000027458,
+          "max": 0.011294007999993028,
+          "stdev": 0.0008281252144673744
+        },
+        "validation_submit": {
+          "n": 3,
+          "min": 0.008960361000049488,
+          "median": 0.009489831999985654,
+          "max": 0.01027432600000111,
+          "stdev": 0.0006610943448721371
+        }
+      },
+      "samples": 3,
+      "validation_observed_seconds": {
+        "n": 3,
+        "min": 3.5443802050000386,
+        "median": 3.7366888169999584,
+        "max": 3.746387487999982,
+        "stdev": 0.11393244259466635
+      },
+      "planning_observed_seconds": {
+        "n": 3,
+        "min": 2.492927999000017,
+        "median": 2.4996761040000024,
+        "max": 2.7012807380000368,
+        "stdev": 0.11839258790157225
+      },
+      "comparison_observed_seconds": {
+        "n": 3,
+        "min": 3.563275314000009,
+        "median": 3.5647251400000073,
+        "max": 3.5689688460000184,
+        "stdev": 0.0029588100840239637
+      },
+      "processing_initial_queue": {
+        "n": 3,
+        "min": 2.303445,
+        "median": 2.352545,
+        "max": 2.501039,
+        "stdev": 0.10287910937276495
+      },
+      "processing_active_all_attempts": {
+        "n": 3,
+        "min": 0.125385729,
+        "median": 0.127952652,
+        "max": 0.150377541,
+        "stdev": 0.013748062938668816
+      },
+      "processing_total_elapsed": {
+        "n": 3,
+        "min": 2.458875,
+        "median": 2.482699,
+        "max": 2.632917,
+        "stdev": 0.0943606982664569
+      },
+      "processing_durable_total_elapsed": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_driving_seconds": {
+        "n": 3,
+        "min": 217.0,
+        "median": 217.0,
+        "max": 217.0,
+        "stdev": 0.0
+      },
+      "operational_service_seconds": {
+        "n": 3,
+        "min": 120.0,
+        "median": 120.0,
+        "max": 120.0,
+        "stdev": 0.0
+      },
+      "operational_waiting_seconds": {
+        "n": 3,
+        "min": 0.0,
+        "median": 0.0,
+        "max": 0.0,
+        "stdev": 0.0
+      },
+      "operational_total_duration_seconds": {
+        "n": 3,
+        "min": 337.0,
+        "median": 337.0,
+        "max": 337.0,
+        "stdev": 0.0
+      },
+      "operational_vehicles_used": {
+        "n": 3,
+        "min": 1.0,
+        "median": 1.0,
+        "max": 1.0,
+        "stdev": 0.0
+      },
+      "operational_routed_orders": {
+        "n": 3,
+        "min": 2.0,
+        "median": 2.0,
+        "max": 2.0,
+        "stdev": 0.0
+      },
+      "sampled_container_peak_bytes": {
+        "backend": 115867648,
+        "import-validation-worker": 67161292,
+        "planning-worker": 78433484,
+        "comparison-worker": 80971038,
+        "database": 114399641,
+        "osrm": 6586105,
+        "vroom": 48895098
+      },
+      "sampled_process_rss_peak_bytes": {
+        "backend": 138924032,
+        "import-validation-worker": 86548480,
+        "planning-worker": 98369536,
+        "comparison-worker": 100638720
+      },
+      "memory_samples": 8,
+      "memory_first_at": "2026-10-05T00:02:18.532608+00:00",
+      "memory_last_at": "2026-10-05T00:02:47.261913+00:00"
+    },
+    {
+      "model": "B2B",
+      "profile": "medium",
+      "format": "xlsx",
+      "concurrency": 1,
+      "rows": {
+        "orders": 10,
+        "order_lines": 30,
+        "inventory": 6,
+        "distribution_centers": 2,
+        "vehicles": 3
+      },
+      "file_bytes": {
+        "package.xlsx": 5101
+      },
+      "file_sha256": {
+        "package.xlsx": "0687e0acb12f7839dd9b7141b5debf48bc323e6f97786f010248bda35521d00d"
+      },
+      "preparation_seconds": 0.005804325999974935,
+      "client_sampled_rss_peak_bytes": 94855168,
+      "client_tracemalloc_peak_bytes": 5701021,
+      "variability": {
+        "cancel": {
+          "n": 3,
+          "min": 0.022268863000022066,
+          "median": 0.02794518899997911,
+          "max": 0.02989429699999846,
+          "stdev": 0.003961627244401887
+        },
+        "comparison_submit": {
+          "n": 3,
+          "min": 0.018813629000021592,
+          "median": 0.018815052999968884,
+          "max": 0.019876619000001483,
+          "stdev": 0.0006133069025453067
+        },
+        "export_comparisons_csv": {
+          "n": 3,
+          "min": 0.08458877099997153,
+          "median": 0.08601136600003656,
+          "max": 0.08678976400000238,
+          "stdev": 0.0011160981264167296
+        },
+        "export_comparisons_xlsx": {
+          "n": 3,
+          "min": 0.4611741150000057,
+          "median": 0.4635201340000208,
+          "max": 0.46717324600001575,
+          "stdev": 0.003023204844427526
+        },
+        "export_runs_csv": {
+          "n": 3,
+          "min": 0.02981516600004852,
+          "median": 0.030040891999988162,
+          "max": 0.03141832700003988,
+          "stdev": 0.0008677945799851413
+        },
+        "export_runs_xlsx": {
+          "n": 3,
+          "min": 0.0933900870000457,
+          "median": 0.09412104599999793,
+          "max": 0.09447152999996433,
+          "stdev": 0.0005517636957848047
+        },
+        "planning_submit": {
+          "n": 3,
+          "min": 0.014516598000000158,
+          "median": 0.014618908000045394,
+          "max": 0.018685658999970656,
+          "stdev": 0.002378024413001171
+        },
+        "publication_with_replay": {
+          "n": 3,
+          "min": 0.028402381999967474,
+          "median": 0.028569744000037645,
+          "max": 0.03761459600002581,
+          "stdev": 0.005271025272241134
+        },
+        "scenario": {
+          "n": 3,
+          "min": 0.004885806000004322,
+          "median": 0.005007029000012153,
+          "max": 0.005077849000031165,
+          "stdev": 9.711762798526089e-05
+        },
+        "upload": {
+          "n": 3,
+          "min": 0.009733820000008109,
+          "median": 0.009877036000034423,
+          "max": 0.010613246999980674,
+          "stdev": 0.000471859673240916
+        },
+        "validation_submit": {
+          "n": 3,
+          "min": 0.008423368000023856,
+          "median": 0.010452561999954924,
+          "max": 0.013324669999974503,
+          "stdev": 0.0024627015635900387
+        }
+      },
+      "samples": 3,
+      "validation_observed_seconds": {
+        "n": 3,
+        "min": 2.296326506000014,
+        "median": 2.4950196400000095,
+        "max": 2.7121914680000145,
+        "stdev": 0.20800089382615075
+      },
+      "planning_observed_seconds": {
+        "n": 3,
+        "min": 3.1206968550000056,
+        "median": 3.1406889200000023,
+        "max": 3.3311632699999905,
+        "stdev": 0.1161724813325915
+      },
+      "comparison_observed_seconds": {
+        "n": 3,
+        "min": 3.585443885000018,
+        "median": 3.5952885040000524,
+        "max": 3.790826121000009,
+        "stdev": 0.11584021973508289
+      },
+      "processing_initial_queue": {
+        "n": 3,
+        "min": 2.776006,
+        "median": 2.90985,
+        "max": 3.069248,
+        "stdev": 0.14680645382271165
+      },
+      "processing_active_all_attempts": {
+        "n": 3,
+        "min": 0.156927999,
+        "median": 0.168310084,
+        "max": 0.17451447,
+        "stdev": 0.008919363082810916
+      },
+      "processing_total_elapsed": {
+        "n": 3,
+        "min": 2.937401,
+        "median": 3.082309,
+        "max": 3.247359,
+        "stdev": 0.15508803560558757
+      },
+      "processing_durable_total_elapsed": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_driving_seconds": {
+        "n": 3,
+        "min": 1366.0,
+        "median": 1366.0,
+        "max": 1366.0,
+        "stdev": 0.0
+      },
+      "operational_service_seconds": {
+        "n": 3,
+        "min": 3000.0,
+        "median": 3000.0,
+        "max": 3000.0,
+        "stdev": 0.0
+      },
+      "operational_waiting_seconds": {
+        "n": 3,
+        "min": 0.0,
+        "median": 0.0,
+        "max": 0.0,
+        "stdev": 0.0
+      },
+      "operational_total_duration_seconds": {
+        "n": 3,
+        "min": 4366.0,
+        "median": 4366.0,
+        "max": 4366.0,
+        "stdev": 0.0
+      },
+      "operational_vehicles_used": {
+        "n": 3,
+        "min": 2.0,
+        "median": 2.0,
+        "max": 2.0,
+        "stdev": 0.0
+      },
+      "operational_routed_orders": {
+        "n": 3,
+        "min": 10.0,
+        "median": 10.0,
+        "max": 10.0,
+        "stdev": 0.0
+      },
+      "sampled_container_peak_bytes": {
+        "backend": 128555417,
+        "import-validation-worker": 69583503,
+        "planning-worker": 78810972,
+        "comparison-worker": 81327554,
+        "database": 112826777,
+        "osrm": 8027897,
+        "vroom": 49723473
+      },
+      "sampled_process_rss_peak_bytes": {
+        "backend": 150188032,
+        "import-validation-worker": 86626304,
+        "planning-worker": 98500608,
+        "comparison-worker": 101093376
+      },
+      "memory_samples": 8,
+      "memory_first_at": "2026-10-05T00:02:59.704553+00:00",
+      "memory_last_at": "2026-10-05T00:03:28.432680+00:00"
+    },
+    {
+      "model": "B2C",
+      "profile": "medium",
+      "format": "csv",
+      "concurrency": 2,
+      "rows": {
+        "orders": 10,
+        "order_lines": 30,
+        "inventory": 6,
+        "distribution_centers": 2,
+        "vehicles": 3
+      },
+      "file_bytes": {
+        "orders.csv": 1252,
+        "order_lines.csv": 923,
+        "inventory.csv": 396,
+        "distribution_centers.csv": 164,
+        "vehicles.csv": 397
+      },
+      "file_sha256": {
+        "orders.csv": "e6ec1503a5742db492c0bd538498b8b4834cf26ac653a8525121358daf0514c1",
+        "order_lines.csv": "9f65eab3bdecfd59bc2d26a34bb888e94a249542df3827bd9f0cc647d19097bc",
+        "inventory.csv": "08521796ec387dacc6a26858f3556537b38cf1d5d1152e56426defc12721ca90",
+        "distribution_centers.csv": "04dedf54f04af7e218563a0ed0a85abc5505907b28617e10644b46eb35af2f74",
+        "vehicles.csv": "57f55c2ae0882c7712c119f871f511468a5a38aaceaf26a6d4cce6e75c0035ee"
+      },
+      "preparation_seconds": 0.0008196370000064235,
+      "client_sampled_rss_peak_bytes": 107163648,
+      "client_tracemalloc_peak_bytes": 8062465,
+      "variability": {
+        "cancel": {
+          "n": 6,
+          "min": 0.022258365999960006,
+          "median": 0.026891620500009594,
+          "max": 0.03278602599999658,
+          "stdev": 0.003678676887152374
+        },
+        "comparison_submit": {
+          "n": 6,
+          "min": 0.018740453999953388,
+          "median": 0.018860087000007297,
+          "max": 0.026711132000002635,
+          "stdev": 0.003784436660865463
+        },
+        "export_comparisons_csv": {
+          "n": 6,
+          "min": 0.09679780499999424,
+          "median": 0.11367171300003065,
+          "max": 0.16644125300001633,
+          "stdev": 0.031498563330787446
+        },
+        "export_comparisons_xlsx": {
+          "n": 6,
+          "min": 0.45480282099998703,
+          "median": 0.5141724420000173,
+          "max": 0.5946338159999982,
+          "stdev": 0.05579015123589616
+        },
+        "export_runs_csv": {
+          "n": 6,
+          "min": 0.03142299600000342,
+          "median": 0.12534396999998876,
+          "max": 0.2722755810000308,
+          "stdev": 0.11645423185700118
+        },
+        "export_runs_xlsx": {
+          "n": 6,
+          "min": 0.09887582400000383,
+          "median": 0.20449378600000045,
+          "max": 0.33584284200003367,
+          "stdev": 0.11845251931352964
+        },
+        "planning_submit": {
+          "n": 6,
+          "min": 0.024529557999983354,
+          "median": 0.026253764500012267,
+          "max": 0.03380999399996654,
+          "stdev": 0.0035710370881214468
+        },
+        "publication_with_replay": {
+          "n": 6,
+          "min": 0.04195954200002916,
+          "median": 0.04657368799999517,
+          "max": 0.06600766999997632,
+          "stdev": 0.008962649832505297
+        },
+        "scenario": {
+          "n": 6,
+          "min": 0.005699108000044362,
+          "median": 0.007174341499990078,
+          "max": 0.016412605999960306,
+          "stdev": 0.003942018911675755
+        },
+        "upload": {
+          "n": 6,
+          "min": 0.016780113000038455,
+          "median": 0.02302556949996415,
+          "max": 0.024138231999984328,
+          "stdev": 0.0032824693899247944
+        },
+        "validation_submit": {
+          "n": 6,
+          "min": 0.012505975999999919,
+          "median": 0.01948815149998495,
+          "max": 0.023391177999997126,
+          "stdev": 0.0040473160600343755
+        }
+      },
+      "samples": 6,
+      "validation_observed_seconds": {
+        "n": 6,
+        "min": 0.6593201189999718,
+        "median": 1.0583097665000025,
+        "max": 1.9233571839999968,
+        "stdev": 0.5771910135744479
+      },
+      "planning_observed_seconds": {
+        "n": 6,
+        "min": 3.816592469999989,
+        "median": 4.121130703999995,
+        "max": 4.661382039999978,
+        "stdev": 0.31397281035683966
+      },
+      "comparison_observed_seconds": {
+        "n": 6,
+        "min": 3.6288645969999607,
+        "median": 3.68150143150001,
+        "max": 3.731498375000001,
+        "stdev": 0.04125868288688789
+      },
+      "processing_initial_queue": {
+        "n": 6,
+        "min": 3.475361,
+        "median": 3.79644,
+        "max": 4.285781,
+        "stdev": 0.3030046672672992
+      },
+      "processing_active_all_attempts": {
+        "n": 6,
+        "min": 0.165074764,
+        "median": 0.16952954199999998,
+        "max": 0.177869259,
+        "stdev": 0.005347755400625597
+      },
+      "processing_total_elapsed": {
+        "n": 6,
+        "min": 3.645472,
+        "median": 3.974232,
+        "max": 4.467363,
+        "stdev": 0.30605312170580234
+      },
+      "processing_durable_total_elapsed": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_driving_seconds": {
+        "n": 6,
+        "min": 1366.0,
+        "median": 1366.0,
+        "max": 1366.0,
+        "stdev": 0.0
+      },
+      "operational_service_seconds": {
+        "n": 6,
+        "min": 600.0,
+        "median": 600.0,
+        "max": 600.0,
+        "stdev": 0.0
+      },
+      "operational_waiting_seconds": {
+        "n": 6,
+        "min": 0.0,
+        "median": 0.0,
+        "max": 0.0,
+        "stdev": 0.0
+      },
+      "operational_total_duration_seconds": {
+        "n": 6,
+        "min": 1966.0,
+        "median": 1966.0,
+        "max": 1966.0,
+        "stdev": 0.0
+      },
+      "operational_vehicles_used": {
+        "n": 6,
+        "min": 2.0,
+        "median": 2.0,
+        "max": 2.0,
+        "stdev": 0.0
+      },
+      "operational_routed_orders": {
+        "n": 6,
+        "min": 10.0,
+        "median": 10.0,
+        "max": 10.0,
+        "stdev": 0.0
+      },
+      "sampled_container_peak_bytes": {
+        "backend": 160536985,
+        "import-validation-worker": 69478645,
+        "planning-worker": 78737571,
+        "comparison-worker": 81579212,
+        "database": 120586240,
+        "osrm": 8298430,
+        "vroom": 51390709
+      },
+      "sampled_process_rss_peak_bytes": {
+        "backend": 183681024,
+        "import-validation-worker": 86626304,
+        "planning-worker": 98500608,
+        "comparison-worker": 101093376
+      },
+      "memory_samples": 8,
+      "memory_first_at": "2026-10-05T00:03:40.473634+00:00",
+      "memory_last_at": "2026-10-05T00:04:09.276998+00:00"
+    },
+    {
+      "model": "B2B",
+      "profile": "bounded",
+      "format": "csv",
+      "concurrency": 2,
+      "rows": {
+        "orders": 20,
+        "order_lines": 60,
+        "inventory": 12,
+        "distribution_centers": 4,
+        "vehicles": 6
+      },
+      "file_bytes": {
+        "orders.csv": 2381,
+        "order_lines.csv": 1793,
+        "inventory.csv": 684,
+        "distribution_centers.csv": 250,
+        "vehicles.csv": 574
+      },
+      "file_sha256": {
+        "orders.csv": "3e671c02a9c2dac94f328f991199bbd7fcd4648dd611697ed5fc3bba369fecf2",
+        "order_lines.csv": "18469466e76ab217796c46477b7d28590f948cb3e8a0c7076ce050445e0b722d",
+        "inventory.csv": "5f0eca1aea022f4c499f103aba5d8d0f20c78dab35019ff1faa018b5f4f35d38",
+        "distribution_centers.csv": "91657c08a037c8fc2bf15dd1dd322ad3a1d93b3c8f37bf32e5e9ca2bba6d636f",
+        "vehicles.csv": "0201473efcf57541ff2b2eb86fff1249e1d371e099cec72e330b4658e6af2ff1"
+      },
+      "preparation_seconds": 0.0011441899999908856,
+      "client_sampled_rss_peak_bytes": 116588544,
+      "client_tracemalloc_peak_bytes": 12426614,
+      "variability": {
+        "cancel": {
+          "n": 6,
+          "min": 0.032785436000040136,
+          "median": 0.042195153499989146,
+          "max": 0.047547420000000784,
+          "stdev": 0.0064984254505196445
+        },
+        "comparison_submit": {
+          "n": 6,
+          "min": 0.02092244599998594,
+          "median": 0.02598300849999191,
+          "max": 0.031360609999978806,
+          "stdev": 0.0038500646817555915
+        },
+        "export_comparisons_csv": {
+          "n": 6,
+          "min": 0.19456927599998153,
+          "median": 0.4029944794999665,
+          "max": 0.6869642959999851,
+          "stdev": 0.20322724055805672
+        },
+        "export_comparisons_xlsx": {
+          "n": 6,
+          "min": 1.044447823999974,
+          "median": 1.3431452025000112,
+          "max": 1.6691148899999462,
+          "stdev": 0.3081409945001016
+        },
+        "export_runs_csv": {
+          "n": 6,
+          "min": 0.04523543900000959,
+          "median": 0.11646391899998321,
+          "max": 0.29892399799996383,
+          "stdev": 0.11404017109932214
+        },
+        "export_runs_xlsx": {
+          "n": 6,
+          "min": 0.19723242899999605,
+          "median": 0.3431437790000018,
+          "max": 0.5622103580000157,
+          "stdev": 0.16252684041609855
+        },
+        "planning_submit": {
+          "n": 6,
+          "min": 0.019505788999993,
+          "median": 0.027280379999979232,
+          "max": 0.03135669800002461,
+          "stdev": 0.0043550906959245956
+        },
+        "publication_with_replay": {
+          "n": 6,
+          "min": 0.03558105299998715,
+          "median": 0.05059430549999888,
+          "max": 0.054750063000028604,
+          "stdev": 0.008419453167351482
+        },
+        "scenario": {
+          "n": 6,
+          "min": 0.006556543999977293,
+          "median": 0.008181596000014224,
+          "max": 0.011711179000030825,
+          "stdev": 0.0019442307113846488
+        },
+        "upload": {
+          "n": 6,
+          "min": 0.018158666000033463,
+          "median": 0.02532530450000081,
+          "max": 0.05530543999998372,
+          "stdev": 0.016032463765201725
+        },
+        "validation_submit": {
+          "n": 6,
+          "min": 0.016365962999998374,
+          "median": 0.018463604500027486,
+          "max": 0.02463534299999992,
+          "stdev": 0.003121297430770953
+        }
+      },
+      "samples": 6,
+      "validation_observed_seconds": {
+        "n": 6,
+        "min": 2.5519262479999725,
+        "median": 3.1848723244999917,
+        "max": 5.087877182,
+        "stdev": 1.1279568549554038
+      },
+      "planning_observed_seconds": {
+        "n": 6,
+        "min": 0.48122356900000796,
+        "median": 0.9958693395000182,
+        "max": 5.062310730000036,
+        "stdev": 2.215320734867043
+      },
+      "comparison_observed_seconds": {
+        "n": 6,
+        "min": 3.9020696200000202,
+        "median": 4.0788010365000105,
+        "max": 4.18174946900001,
+        "stdev": 0.09871953598927304
+      },
+      "processing_initial_queue": {
+        "n": 6,
+        "min": 0.058002,
+        "median": 0.630897,
+        "max": 4.772789,
+        "stdev": 2.2681393158033307
+      },
+      "processing_active_all_attempts": {
+        "n": 6,
+        "min": 0.207502316,
+        "median": 0.22526928149999997,
+        "max": 0.242893221,
+        "stdev": 0.013872576136488401
+      },
+      "processing_total_elapsed": {
+        "n": 6,
+        "min": 0.280921,
+        "median": 0.870904,
+        "max": 4.995481,
+        "stdev": 2.2582402654162967
+      },
+      "processing_durable_total_elapsed": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_driving_seconds": {
+        "n": 6,
+        "min": 2237.0,
+        "median": 2237.0,
+        "max": 2237.0,
+        "stdev": 0.0
+      },
+      "operational_service_seconds": {
+        "n": 6,
+        "min": 6000.0,
+        "median": 6000.0,
+        "max": 6000.0,
+        "stdev": 0.0
+      },
+      "operational_waiting_seconds": {
+        "n": 6,
+        "min": 0.0,
+        "median": 0.0,
+        "max": 0.0,
+        "stdev": 0.0
+      },
+      "operational_total_duration_seconds": {
+        "n": 6,
+        "min": 8237.0,
+        "median": 8237.0,
+        "max": 8237.0,
+        "stdev": 0.0
+      },
+      "operational_vehicles_used": {
+        "n": 6,
+        "min": 3.0,
+        "median": 3.0,
+        "max": 3.0,
+        "stdev": 0.0
+      },
+      "operational_routed_orders": {
+        "n": 6,
+        "min": 20.0,
+        "median": 20.0,
+        "max": 20.0,
+        "stdev": 0.0
+      },
+      "sampled_container_peak_bytes": {
+        "backend": 200802304,
+        "import-validation-worker": 69478645,
+        "planning-worker": 79219916,
+        "comparison-worker": 82418073,
+        "database": 130442854,
+        "osrm": 10863247,
+        "vroom": 51873054
+      },
+      "sampled_process_rss_peak_bytes": {
+        "backend": 239013888,
+        "import-validation-worker": 86626304,
+        "planning-worker": 99033088,
+        "comparison-worker": 102035456
+      },
+      "memory_samples": 10,
+      "memory_first_at": "2026-10-05T00:04:27.579736+00:00",
+      "memory_last_at": "2026-10-05T00:05:04.689946+00:00"
+    },
+    {
+      "model": "B2C",
+      "profile": "bounded",
+      "format": "xlsx",
+      "concurrency": 2,
+      "rows": {
+        "orders": 20,
+        "order_lines": 60,
+        "inventory": 12,
+        "distribution_centers": 4,
+        "vehicles": 6
+      },
+      "file_bytes": {
+        "package.xlsx": 6548
+      },
+      "file_sha256": {
+        "package.xlsx": "2e085fccf2c97a384d443488dcfb09f1dffeed2c15fce31b59dc393006ea785e"
+      },
+      "preparation_seconds": 0.009255120999966948,
+      "client_sampled_rss_peak_bytes": 118108160,
+      "client_tracemalloc_peak_bytes": 12514138,
+      "variability": {
+        "cancel": {
+          "n": 6,
+          "min": 0.03849732899993796,
+          "median": 0.04353346350001175,
+          "max": 0.06663050299994211,
+          "stdev": 0.010204248610760878
+        },
+        "comparison_submit": {
+          "n": 6,
+          "min": 0.020419713000023876,
+          "median": 0.026336692500024128,
+          "max": 0.029090242000052058,
+          "stdev": 0.004047959804044578
+        },
+        "export_comparisons_csv": {
+          "n": 6,
+          "min": 0.17389515299998948,
+          "median": 0.20039423499991926,
+          "max": 0.6374271240000553,
+          "stdev": 0.19539125965076756
+        },
+        "export_comparisons_xlsx": {
+          "n": 6,
+          "min": 0.9542436049999878,
+          "median": 1.2933588539999619,
+          "max": 1.8311130640000783,
+          "stdev": 0.32560097284343154
+        },
+        "export_runs_csv": {
+          "n": 6,
+          "min": 0.04148944099995333,
+          "median": 0.11742194699996844,
+          "max": 0.5622577730000557,
+          "stdev": 0.19954322855653917
+        },
+        "export_runs_xlsx": {
+          "n": 6,
+          "min": 0.1640340379999543,
+          "median": 0.30265491450001036,
+          "max": 0.5047702969999364,
+          "stdev": 0.15764813003471115
+        },
+        "planning_submit": {
+          "n": 6,
+          "min": 0.029039353000030133,
+          "median": 0.034866144999966764,
+          "max": 0.038337802999990345,
+          "stdev": 0.0035310581100754224
+        },
+        "publication_with_replay": {
+          "n": 6,
+          "min": 0.06527724900001886,
+          "median": 0.06823953950004125,
+          "max": 0.08834619200001725,
+          "stdev": 0.008828283874596452
+        },
+        "scenario": {
+          "n": 6,
+          "min": 0.006067097000027388,
+          "median": 0.007672251499968752,
+          "max": 0.008857587999955285,
+          "stdev": 0.0013240777850493499
+        },
+        "upload": {
+          "n": 6,
+          "min": 0.012307301000078041,
+          "median": 0.01751621599998998,
+          "max": 0.017890852000050472,
+          "stdev": 0.0021820770303202616
+        },
+        "validation_submit": {
+          "n": 6,
+          "min": 0.013582527999915328,
+          "median": 0.016365705499993055,
+          "max": 0.019531111999981476,
+          "stdev": 0.0023649336014435977
+        }
+      },
+      "samples": 6,
+      "validation_observed_seconds": {
+        "n": 6,
+        "min": 0.8658652630000461,
+        "median": 1.2879337315000043,
+        "max": 2.968641517999913,
+        "stdev": 0.9935262186305335
+      },
+      "planning_observed_seconds": {
+        "n": 6,
+        "min": 1.5121842779999497,
+        "median": 2.052981467499933,
+        "max": 2.57760069699998,
+        "stdev": 0.4003653853805323
+      },
+      "comparison_observed_seconds": {
+        "n": 6,
+        "min": 4.282072389999939,
+        "median": 4.458493761999989,
+        "max": 4.594494180999959,
+        "stdev": 0.13630508595580573
+      },
+      "processing_initial_queue": {
+        "n": 6,
+        "min": 1.217194,
+        "median": 1.6576315,
+        "max": 2.167456,
+        "stdev": 0.35801725319915334
+      },
+      "processing_active_all_attempts": {
+        "n": 6,
+        "min": 0.194366048,
+        "median": 0.2181543795,
+        "max": 0.251655073,
+        "stdev": 0.0253462469381815
+      },
+      "processing_total_elapsed": {
+        "n": 6,
+        "min": 1.415526,
+        "median": 1.912156,
+        "max": 2.380518,
+        "stdev": 0.35703431922659756
+      },
+      "processing_durable_total_elapsed": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_driving_seconds": {
+        "n": 6,
+        "min": 2237.0,
+        "median": 2237.0,
+        "max": 2237.0,
+        "stdev": 0.0
+      },
+      "operational_service_seconds": {
+        "n": 6,
+        "min": 1200.0,
+        "median": 1200.0,
+        "max": 1200.0,
+        "stdev": 0.0
+      },
+      "operational_waiting_seconds": {
+        "n": 6,
+        "min": 0.0,
+        "median": 0.0,
+        "max": 0.0,
+        "stdev": 0.0
+      },
+      "operational_total_duration_seconds": {
+        "n": 6,
+        "min": 3437.0,
+        "median": 3437.0,
+        "max": 3437.0,
+        "stdev": 0.0
+      },
+      "operational_vehicles_used": {
+        "n": 6,
+        "min": 3.0,
+        "median": 3.0,
+        "max": 3.0,
+        "stdev": 0.0
+      },
+      "operational_routed_orders": {
+        "n": 6,
+        "min": 20.0,
+        "median": 20.0,
+        "max": 20.0,
+        "stdev": 0.0
+      },
+      "sampled_container_peak_bytes": {
+        "backend": 226072985,
+        "import-validation-worker": 69635932,
+        "planning-worker": 79293317,
+        "comparison-worker": 82407587,
+        "database": 130023424,
+        "osrm": 10779361,
+        "vroom": 56004444
+      },
+      "sampled_process_rss_peak_bytes": {
+        "backend": 254005248,
+        "import-validation-worker": 86769664,
+        "planning-worker": 99033088,
+        "comparison-worker": 102039552
+      },
+      "memory_samples": 8,
+      "memory_first_at": "2026-10-05T00:05:19.662935+00:00",
+      "memory_last_at": "2026-10-05T00:05:48.679216+00:00"
+    },
+    {
+      "model": "B2B",
+      "profile": "inventory-1000",
+      "format": "csv",
+      "concurrency": 1,
+      "rows": {
+        "orders": 1,
+        "order_lines": 1,
+        "inventory": 1000,
+        "distribution_centers": 1,
+        "vehicles": 1
+      },
+      "file_bytes": {
+        "orders.csv": 212,
+        "order_lines.csv": 81,
+        "inventory.csv": 50108,
+        "distribution_centers.csv": 120,
+        "vehicles.csv": 286
+      },
+      "file_sha256": {
+        "orders.csv": "2c818300b4e1524412a8bb124ca3e445c4b24660e5cd5db3abfe47e722bf6667",
+        "order_lines.csv": "d3f79dcd5bdee6f99fb5f15b4344671730b8eb7d7d06eac0534e8b702c274382",
+        "inventory.csv": "b9fb3e83c5d12cc45d6f088c74d79cd82ab5ff47af5c47510915814bfdbddc17",
+        "distribution_centers.csv": "aa5e03b26d1247a53f4441a773bb19586f8d50fe2b118ce393b7fbf3ca9ebd41",
+        "vehicles.csv": "713fa544583eb0b44d7150aa2ccf64a7492251c809d3cad314f3eddf9e87c088"
+      },
+      "preparation_seconds": 0.004805853999982901,
+      "client_sampled_rss_peak_bytes": 85532672,
+      "client_tracemalloc_peak_bytes": 958387,
+      "variability": {
+        "publication_with_replay": {
+          "n": 3,
+          "min": 0.13033496399998512,
+          "median": 0.1401911850000488,
+          "max": 0.15059831500002474,
+          "stdev": 0.010132923574412455
+        },
+        "scenario": {
+          "n": 3,
+          "min": 0.004932542000005924,
+          "median": 0.004950713999960499,
+          "max": 0.005128373999923497,
+          "stdev": 0.00010820002261315056
+        },
+        "upload": {
+          "n": 3,
+          "min": 0.013858212000059211,
+          "median": 0.014588869000021987,
+          "max": 0.01528806099997837,
+          "stdev": 0.0007149821987256546
+        },
+        "validation_submit": {
+          "n": 3,
+          "min": 0.009347774999923786,
+          "median": 0.01037779800003591,
+          "max": 0.010621261000096638,
+          "stdev": 0.0006760162973620779
+        }
+      },
+      "samples": 3,
+      "validation_observed_seconds": {
+        "n": 3,
+        "min": 4.778329959999951,
+        "median": 4.7795399350000025,
+        "max": 4.9896276610001,
+        "stdev": 0.12164499928298247
+      },
+      "planning_observed_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "comparison_observed_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_initial_queue": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_active_all_attempts": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_total_elapsed": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_durable_total_elapsed": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_driving_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_service_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_waiting_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_total_duration_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_vehicles_used": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_routed_orders": {
+        "n": 0,
+        "unknown": true
+      },
+      "sampled_container_peak_bytes": {
+        "backend": 198390579,
+        "import-validation-worker": 67947724,
+        "planning-worker": 79094087,
+        "comparison-worker": 82155929,
+        "database": 130128281,
+        "osrm": 10297016,
+        "vroom": 52281999
+      },
+      "sampled_process_rss_peak_bytes": {
+        "backend": 220545024,
+        "import-validation-worker": 87003136,
+        "planning-worker": 99033088,
+        "comparison-worker": 102035456
+      },
+      "memory_samples": 4,
+      "memory_first_at": "2026-10-05T00:05:58.056591+00:00",
+      "memory_last_at": "2026-10-05T00:06:10.345970+00:00"
+    },
+    {
+      "model": "B2C",
+      "profile": "inventory-1000",
+      "format": "xlsx",
+      "concurrency": 1,
+      "rows": {
+        "orders": 1,
+        "order_lines": 1,
+        "inventory": 1000,
+        "distribution_centers": 1,
+        "vehicles": 1
+      },
+      "file_bytes": {
+        "package.xlsx": 26607
+      },
+      "file_sha256": {
+        "package.xlsx": "21d35caf8c697e6b47f1c35ea671486b618995c35c4748459b914ea3cdfd9e5e"
+      },
+      "preparation_seconds": 0.015973518999999214,
+      "client_sampled_rss_peak_bytes": 86745088,
+      "client_tracemalloc_peak_bytes": 885469,
+      "variability": {
+        "publication_with_replay": {
+          "n": 3,
+          "min": 0.16854431000001568,
+          "median": 0.18354054200005976,
+          "max": 0.21106161900002007,
+          "stdev": 0.021563929056175983
+        },
+        "scenario": {
+          "n": 3,
+          "min": 0.004689432999953169,
+          "median": 0.004928918000018712,
+          "max": 0.00522948599996198,
+          "stdev": 0.0002706016231365481
+        },
+        "upload": {
+          "n": 3,
+          "min": 0.010002526999983274,
+          "median": 0.010204875999988872,
+          "max": 0.010898135999923397,
+          "stdev": 0.0004696931668806475
+        },
+        "validation_submit": {
+          "n": 3,
+          "min": 0.009277255000029072,
+          "median": 0.009512333000088802,
+          "max": 0.01172623900004055,
+          "stdev": 0.0013511824497482847
+        }
+      },
+      "samples": 3,
+      "validation_observed_seconds": {
+        "n": 3,
+        "min": 4.77642678299992,
+        "median": 4.779793598999959,
+        "max": 4.78171312500001,
+        "stdev": 0.0026759871008941376
+      },
+      "planning_observed_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "comparison_observed_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_initial_queue": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_active_all_attempts": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_total_elapsed": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_durable_total_elapsed": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_driving_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_service_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_waiting_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_total_duration_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_vehicles_used": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_routed_orders": {
+        "n": 0,
+        "unknown": true
+      },
+      "sampled_container_peak_bytes": {
+        "backend": 199229440,
+        "import-validation-worker": 72708259,
+        "planning-worker": 79314288,
+        "comparison-worker": 82281758,
+        "database": 130442854,
+        "osrm": 10297016,
+        "vroom": 51495567
+      },
+      "sampled_process_rss_peak_bytes": {
+        "backend": 217403392,
+        "import-validation-worker": 87527424,
+        "planning-worker": 99033088,
+        "comparison-worker": 102035456
+      },
+      "memory_samples": 4,
+      "memory_first_at": "2026-10-05T00:06:18.330195+00:00",
+      "memory_last_at": "2026-10-05T00:06:30.639413+00:00"
+    },
+    {
+      "model": "B2B",
+      "profile": "inventory-10000",
+      "format": "csv",
+      "concurrency": 1,
+      "rows": {
+        "orders": 1,
+        "order_lines": 1,
+        "inventory": 10000,
+        "distribution_centers": 1,
+        "vehicles": 1
+      },
+      "file_bytes": {
+        "orders.csv": 212,
+        "order_lines.csv": 81,
+        "inventory.csv": 500108,
+        "distribution_centers.csv": 120,
+        "vehicles.csv": 286
+      },
+      "file_sha256": {
+        "orders.csv": "2c818300b4e1524412a8bb124ca3e445c4b24660e5cd5db3abfe47e722bf6667",
+        "order_lines.csv": "d3f79dcd5bdee6f99fb5f15b4344671730b8eb7d7d06eac0534e8b702c274382",
+        "inventory.csv": "38e9b1c49bc88b0781b395bb6e4714841ae8e7092060974400e05cd2551c37f0",
+        "distribution_centers.csv": "aa5e03b26d1247a53f4441a773bb19586f8d50fe2b118ce393b7fbf3ca9ebd41",
+        "vehicles.csv": "713fa544583eb0b44d7150aa2ccf64a7492251c809d3cad314f3eddf9e87c088"
+      },
+      "preparation_seconds": 0.04397668100000374,
+      "client_sampled_rss_peak_bytes": 92569600,
+      "client_tracemalloc_peak_bytes": 921850,
+      "variability": {
+        "publication_with_replay": {
+          "n": 3,
+          "min": 1.2187563019999743,
+          "median": 1.2539818500000592,
+          "max": 1.2751352149999775,
+          "stdev": 0.02848065400053161
+        },
+        "scenario": {
+          "n": 3,
+          "min": 0.005084993999957987,
+          "median": 0.00510320800003683,
+          "max": 0.005228726000041206,
+          "stdev": 7.825748736478097e-05
+        },
+        "upload": {
+          "n": 3,
+          "min": 0.014785888999995223,
+          "median": 0.015455287000008866,
+          "max": 0.015616956000030768,
+          "stdev": 0.0004406251064375152
+        },
+        "validation_submit": {
+          "n": 3,
+          "min": 0.009149839000087923,
+          "median": 0.009258927000018957,
+          "max": 0.010269248999975389,
+          "stdev": 0.0006172154517363952
+        }
+      },
+      "samples": 3,
+      "validation_observed_seconds": {
+        "n": 3,
+        "min": 3.7479631749999953,
+        "median": 3.7482580009999538,
+        "max": 3.9530770799999573,
+        "stdev": 0.11833755114721148
+      },
+      "planning_observed_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "comparison_observed_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_initial_queue": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_active_all_attempts": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_total_elapsed": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_durable_total_elapsed": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_driving_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_service_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_waiting_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_total_duration_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_vehicles_used": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_routed_orders": {
+        "n": 0,
+        "unknown": true
+      },
+      "sampled_container_peak_bytes": {
+        "backend": 198390579,
+        "import-validation-worker": 75476500,
+        "planning-worker": 79146516,
+        "comparison-worker": 82145443,
+        "database": 138726604,
+        "osrm": 10297016,
+        "vroom": 51422167
+      },
+      "sampled_process_rss_peak_bytes": {
+        "backend": 216371200,
+        "import-validation-worker": 94793728,
+        "planning-worker": 99033088,
+        "comparison-worker": 102035456
+      },
+      "memory_samples": 4,
+      "memory_first_at": "2026-10-05T00:06:39.640105+00:00",
+      "memory_last_at": "2026-10-05T00:06:51.962009+00:00"
+    },
+    {
+      "model": "B2C",
+      "profile": "inventory-10000",
+      "format": "xlsx",
+      "concurrency": 1,
+      "rows": {
+        "orders": 1,
+        "order_lines": 1,
+        "inventory": 10000,
+        "distribution_centers": 1,
+        "vehicles": 1
+      },
+      "file_bytes": {
+        "package.xlsx": 230229
+      },
+      "file_sha256": {
+        "package.xlsx": "3632c4932a6c4860c527b538743b0f884ad150ca07b1c2e7f8440b0847c52f7b"
+      },
+      "preparation_seconds": 0.12452277199997752,
+      "client_sampled_rss_peak_bytes": 94834688,
+      "client_tracemalloc_peak_bytes": 807725,
+      "variability": {
+        "publication_with_replay": {
+          "n": 3,
+          "min": 1.5756714919999695,
+          "median": 1.5876390420000916,
+          "max": 1.734439314000042,
+          "stdev": 0.08841263429219412
+        },
+        "scenario": {
+          "n": 3,
+          "min": 0.004992083999923125,
+          "median": 0.005263098999989779,
+          "max": 0.005520254999964891,
+          "stdev": 0.00026411580284332593
+        },
+        "upload": {
+          "n": 3,
+          "min": 0.011813702000040394,
+          "median": 0.01210155300009319,
+          "max": 0.012383468000052744,
+          "stdev": 0.00028488815355143157
+        },
+        "validation_submit": {
+          "n": 3,
+          "min": 0.00945139200007361,
+          "median": 0.009684201000027315,
+          "max": 0.01048031400000582,
+          "stdev": 0.0005395486417890905
+        }
+      },
+      "samples": 3,
+      "validation_observed_seconds": {
+        "n": 3,
+        "min": 3.7493633449998924,
+        "median": 3.7521141030000535,
+        "max": 3.956571703999998,
+        "stdev": 0.11884568518022624
+      },
+      "planning_observed_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "comparison_observed_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_initial_queue": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_active_all_attempts": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_total_elapsed": {
+        "n": 0,
+        "unknown": true
+      },
+      "processing_durable_total_elapsed": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_driving_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_service_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_waiting_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_total_duration_seconds": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_vehicles_used": {
+        "n": 0,
+        "unknown": true
+      },
+      "operational_routed_orders": {
+        "n": 0,
+        "unknown": true
+      },
+      "sampled_container_peak_bytes": {
+        "backend": 200278016,
+        "import-validation-worker": 81128325,
+        "planning-worker": 79251374,
+        "comparison-worker": 82239815,
+        "database": 160536985,
+        "osrm": 10297016,
+        "vroom": 50929336
+      },
+      "sampled_process_rss_peak_bytes": {
+        "backend": 217014272,
+        "import-validation-worker": 96358400,
+        "planning-worker": 99033088,
+        "comparison-worker": 102035456
+      },
+      "memory_samples": 4,
+      "memory_first_at": "2026-10-05T00:07:00.752094+00:00",
+      "memory_last_at": "2026-10-05T00:07:13.107616+00:00"
+    }
+  ],
+  "sources": [
+    {
+      "file": "benchmark-http.json",
+      "sha256": "1d597a8e1426d338551e5e7c159b778c09c5a6e62cb0dc6b37d59b668508b5c2",
+      "head": "88f5398517a5a274ee02a8c986720d01b80833f3",
+      "harness_sha256": "4a3b0802b60730d16a78188541f81fb852b7917145199c32f344540c1a81d642",
+      "environment": {
+        "started_at": "2026-10-05T00:01:27.157137+00:00",
+        "finished_at": "2026-10-05T00:05:52.636207+00:00",
+        "machine": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+        "python": "3.14.7",
+        "packages": {
+          "httpx": "0.28.1",
+          "fastapi": "0.141.1",
+          "SQLAlchemy": "2.0.54",
+          "psycopg": "3.3.6",
+          "starlette": "1.7.0",
+          "python-multipart": "0.0.32"
+        },
+        "docker": {
+          "ServerVersion": "28.0.4",
+          "NCPU": 4,
+          "MemTotal": 16765378560,
+          "OperatingSystem": "Ubuntu 24.04.5 LTS",
+          "Architecture": "x86_64"
+        },
+        "seed": 41042,
+        "logical_cpus": 4,
+        "images": [
+          "routeops-ci-37a806577e4f-frontend-1|routeops-ci-37a806577e4f-frontend",
+          "routeops-ci-37a806577e4f-import-maintenance-1|routeops-ci-37a806577e4f-import-maintenance",
+          "routeops-ci-37a806577e4f-planning-worker-1|routeops-ci-37a806577e4f-planning-worker",
+          "routeops-ci-37a806577e4f-import-validation-worker-1|routeops-ci-37a806577e4f-import-validation-worker",
+          "routeops-ci-37a806577e4f-comparison-worker-1|routeops-ci-37a806577e4f-comparison-worker",
+          "routeops-ci-37a806577e4f-backend-1|routeops-ci-37a806577e4f-backend",
+          "routeops-ci-37a806577e4f-vroom-1|ghcr.io/vroom-project/vroom-docker:v1.15.0",
+          "routeops-ci-37a806577e4f-osrm-1|ghcr.io/project-osrm/osrm-backend:26.9.0-debian",
+          "routeops-ci-37a806577e4f-database-1|postgis/postgis:18-3.6"
+        ]
+      }
+    },
+    {
+      "file": "benchmark-import.json",
+      "sha256": "9b5eda6d332918a9d595b296de006c14a70b170df271024ee8c6d9e22a9ffbec",
+      "head": "88f5398517a5a274ee02a8c986720d01b80833f3",
+      "harness_sha256": "4a3b0802b60730d16a78188541f81fb852b7917145199c32f344540c1a81d642",
+      "environment": {
+        "started_at": "2026-10-05T00:05:53.443798+00:00",
+        "finished_at": "2026-10-05T00:07:17.236062+00:00",
+        "machine": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+        "python": "3.14.7",
+        "packages": {
+          "httpx": "0.28.1",
+          "fastapi": "0.141.1",
+          "SQLAlchemy": "2.0.54",
+          "psycopg": "3.3.6",
+          "starlette": "1.7.0",
+          "python-multipart": "0.0.32"
+        },
+        "docker": {
+          "ServerVersion": "28.0.4",
+          "NCPU": 4,
+          "MemTotal": 16765378560,
+          "OperatingSystem": "Ubuntu 24.04.5 LTS",
+          "Architecture": "x86_64"
+        },
+        "seed": 41042,
+        "logical_cpus": 4,
+        "images": [
+          "routeops-ci-37a806577e4f-frontend-1|routeops-ci-37a806577e4f-frontend",
+          "routeops-ci-37a806577e4f-import-maintenance-1|routeops-ci-37a806577e4f-import-maintenance",
+          "routeops-ci-37a806577e4f-planning-worker-1|routeops-ci-37a806577e4f-planning-worker",
+          "routeops-ci-37a806577e4f-import-validation-worker-1|routeops-ci-37a806577e4f-import-validation-worker",
+          "routeops-ci-37a806577e4f-comparison-worker-1|routeops-ci-37a806577e4f-comparison-worker",
+          "routeops-ci-37a806577e4f-backend-1|routeops-ci-37a806577e4f-backend",
+          "routeops-ci-37a806577e4f-vroom-1|ghcr.io/vroom-project/vroom-docker:v1.15.0",
+          "routeops-ci-37a806577e4f-osrm-1|ghcr.io/project-osrm/osrm-backend:26.9.0-debian",
+          "routeops-ci-37a806577e4f-database-1|postgis/postgis:18-3.6"
+        ]
+      }
+    }
+  ],
+  "build_base_digests_observed_in_ci_logs": [
+    "docker.io/library/node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6",
+    "docker.io/library/python:3.14.7-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56"
+  ]
+}
