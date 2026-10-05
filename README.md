@@ -231,6 +231,11 @@ and basic security (4.2) is implemented and CI verified, pending review; final r
 and portfolio preparation (4.3) remain pending.
 No separate RouteEngine is introduced in this delivery.
 See [4.2 measurements and security boundaries](docs/milestone-4-2-performance-security.md).
+The [candidate image review](docs/milestone-4-2-image-security-review.md) records
+exact digests, distribution backports, bundled components and residual findings.
+The VROOM wrapper now has a local HTTP guard and a pinned supported Node runtime;
+the solver, routing profile and dataset are preserved. Outstanding advisories
+are documented rather than suppressed; this remains a local single-user system.
 
 ## License and map attribution
 

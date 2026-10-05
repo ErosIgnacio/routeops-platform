@@ -253,6 +253,12 @@ Approved deliveries:
    and 39 measured HTTP samples plus ten warmups. Upstream image advisories
    remain explicitly inventoried; no limits/workers/timeouts were increased.
    See [measurements, local boundaries and dependency findings](milestone-4-2-performance-security.md).
+   The [final candidate image assessment](milestone-4-2-image-security-review.md)
+   groups 47 priority component families, distinguishes backports and vendors,
+   mitigates malformed XLSX Unicode and solver HTTP exposure, and replaces only
+   the unsupported VROOM Node executable. Solver/profile/map remain unchanged.
+   Residual advisories and installation-tool findings remain tracked; acceptance
+   is still pending. Existing performance samples precede these mitigations.
 3. **4.3 — documentation, reproduction and portfolio presentation:** final
    runbooks, backup/reset guidance, third-party review and presentation. Not started.
 

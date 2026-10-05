@@ -1,7 +1,7 @@
 {
   "observed_at": "2026-10-04T23:37:02.377079+00:00",
   "tool": "Docker Scout 1.24.0",
-  "scope": "Local image tags scanned by Scout; backend/frontend tags can differ from currently running historic containers. Upstream images fixed by digest. Not final hardened images.",
+  "scope": "Historical initial tags, retained verbatim. Final candidate image scan and reviewed priority dispositions in final_assessment_file; initial REVIEW_REQUIRED entries are not final claims.",
   "images": [
     {
       "service": "backend",
@@ -9830,5 +9830,6 @@
       "result_count": 282,
       "scan_image_reference": "postgis/postgis:18-3.6@sha256:7e00e8c3539fdd43f513b98806c8204714dcd09dea683c259e333d7690317119"
     }
-  ]
+  ],
+  "final_assessment_file": "m42-image-security-assessment.json"
 }

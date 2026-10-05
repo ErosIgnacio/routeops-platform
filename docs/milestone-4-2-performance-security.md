@@ -223,7 +223,7 @@ Ensayo exploratorio Windows: Python 3.14.7, Docker 29.8.1, 16 CPU y 15,4 GiB, co
 ### Hallazgos y límites de la evaluación
 
 - Locks: OSV (46 versiones) y npm audit completos en CI, sin advisories en ese instante; las herramientas consultan nuevamente en cada CI y fallan ante avisos/incompletitud. No hay audit fix ni supresión.
-- Scout inicial: backend 82, frontend 88, OSRM 80, VROOM 357 y PostGIS 281 advisories únicos **por imagen**; hay duplicados entre imágenes. Las referencias analizadas pueden diferir de los contenedores históricos y no constituyen escaneo de cada imagen final de CI. El inventario mantiene ese alcance y REVIEW_REQUIRED; no se declara el despliegue libre de CVEs. Upgrades selectivos de imágenes/avisos aplicables requieren revisión posterior y rebuild OSRM cuando corresponda; no se ocultan alertas para cerrar esta fase.
+- Scout inicial se conserva como registro histórico. La [evaluación final de imágenes](milestone-4-2-image-security-review.md) lo amplía con las cinco imágenes candidatas y checks, IDs/digests exactos, 47 familias prioritarias, backports Debian y vendors. Se mitigaron Unicode XLSX y la frontera HTTP de VROOM; su Node 20 se sustituyó selectivamente por Node 24 fijado, sin cambiar solver/perfil/dataset. Quedan CVEs sin parche y condiciones sin vía observada: no se presentan como corregidas ni se suprimen. El inventario inicial remite al inventario final y no constituye por sí solo la conclusión actual.
 - Se verificaron flujos representativos, no todas las combinaciones ni máximos de importación/exportación. No hay garantía de capacidad, percentil contractual, prueba de estrés prolongada ni comparación estadística entre modelos. Tres repeticiones permiten ver variación, no dimensionar producción.
 - No se agregan objetivos numéricos arbitrarios ni cuotas de CPU/memoria sin evidencia. Se conservan límites actuales y las mediciones como baseline reproducible para cambios selectivos futuros.
 - No hay revisión visual nueva ni autenticación: alcance exclusivamente local/un usuario. Las protecciones Origin/Host no sustituyen autorización.
@@ -250,6 +250,14 @@ certificación de seguridad, capacidad máxima garantizada ni inicio de 4.3.
 33 archivos respecto de main, incluidos los nuevos. Fuentes, pruebas, configuración
 y resumen documental; no se versionan originales privados, logs, venv ni
 informes completos de verificación.
+
+La continuación de imágenes añade seis archivos a aquella lista: las cuatro
+fuentes/contratos del wrapper (`infrastructure/vroom/.dockerignore`, `Dockerfile`,
+`request-guard.cjs`, `request-guard.test.cjs`), el informe de imágenes y
+`docs/research/m42-image-security-assessment.json`. También actualiza seguridad
+XML, sus pruebas, la integración HTTP, Compose, CI y documentación ya enumerados. Son 39 archivos
+en la entrega acumulada respecto de main. Los benchmarks y sus resultados no
+se modificaron ni repitieron; corresponden al baseline previo a Node/guards.
 
 - `.env.example`
 - `.github/workflows/quality.yml`
