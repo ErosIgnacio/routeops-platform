@@ -10,6 +10,9 @@ import re
 import secrets
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -150,6 +153,26 @@ def main() -> None:
         command([*compose, "config", "--quiet"])
         command([*compose, "--profile", "tools", "run", "--rm", "osrm-prepare"])
         command([*compose, "up", "-d", "--build"])
+        port_line = next(
+            line for line in env.read_text().splitlines() if line.startswith("REVIEW_API_PORT=")
+        )
+        port = int(port_line.split("=", 1)[1])
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{port}/health/ready", timeout=3
+                ) as response:
+                    if json.load(response)["status"] == "ready":
+                        print(
+                            "Review API ready; migrations and real routing dependencies available"
+                        )
+                        break
+            except OSError, urllib.error.URLError:
+                pass  # Expected only during startup; exhaustion fails explicitly below.
+            time.sleep(0.5)
+        else:
+            raise RuntimeError("Review API readiness failed within the 120s startup check")
     elif args.action == "status":
         command([*compose, "ps", "-a"])
     elif args.action == "stop":

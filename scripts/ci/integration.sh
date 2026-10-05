@@ -33,6 +33,16 @@ python scripts/ci/check_junit.py .ci-artifacts/integration.xml
 # Reuse the application's existing smoke against this project's ephemeral port.
 backend_address=$("${compose[@]}" port backend 8000)
 bash scripts/smoke.sh "http://$backend_address" > .ci-artifacts/smoke.txt
+# Bounded functional portfolio tours, not benchmarks or changes to workload caps.
+for model in b2b b2c; do
+  format=csv
+  if [[ $model == b2c ]]; then format=xlsx; fi
+  "${compose[@]}" exec -T backend python -m routeops.infrastructure.data.portfolio_cases \
+    --model "$model" --format "$format" --output "/tmp/portfolio-$model"
+  "${compose[@]}" cp "backend:/tmp/portfolio-$model" ".ci-work/portfolio-$model"
+  python scripts/review/tour.py --base-url "http://$backend_address" --model "$model" \
+    --package ".ci-work/portfolio-$model" --output ".ci-artifacts/portfolio-$model"
+done
 if [[ ${ROUTEOPS_CI_BENCHMARKS:-false} == true ]]; then
   python -m pip install --disable-pip-version-check -r backend/requirements.lock.txt
   PYTHONPATH=backend/src python backend/scripts/benchmark_acceptance.py \

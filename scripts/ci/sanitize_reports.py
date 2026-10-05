@@ -12,9 +12,12 @@ def sanitize(directory: Path, secret: str) -> None:
     marker.unlink(missing_ok=True)
     if not secret:
         raise ValueError("Missing ephemeral CI secret")
-    for path in directory.iterdir():
-        if path.suffix not in (".xml", ".txt") and not (
-            path.suffix == ".json" and path.name.startswith("benchmark-")
+    for path in [*directory.iterdir(), *directory.glob("portfolio-*/report.json")]:
+        portfolio_report = path.name == "report.json" and path.parent.name.startswith("portfolio-")
+        if (
+            path.suffix not in (".xml", ".txt")
+            and not (path.suffix == ".json" and path.name.startswith("benchmark-"))
+            and not portfolio_report
         ):
             continue
         text = path.read_text(encoding="utf-8").replace(secret, "[REDACTED]")

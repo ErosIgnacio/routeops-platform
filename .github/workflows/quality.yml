@@ -116,6 +116,7 @@ jobs:
             .ci-artifacts/*.xml
             .ci-artifacts/*.txt
             .ci-artifacts/benchmark-*.json
+            .ci-artifacts/portfolio-*/report.json
           retention-days: 14
           if-no-files-found: error
-          include-hidden-files: true # Restricted to sanitized XML/TXT reports.
+          include-hidden-files: true # Explicit sanitized reports; no inputs, dumps or originals.

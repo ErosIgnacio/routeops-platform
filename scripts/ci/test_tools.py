@@ -82,6 +82,20 @@ class EvidenceContracts(unittest.TestCase):
 
 
 class ReportContracts(unittest.TestCase):
+    def test_portfolio_report_is_sanitized_but_original_inputs_are_not_selected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            folder = root / "portfolio-b2b"
+            folder.mkdir()
+            report = folder / "report.json"
+            report.write_text('{"synthetic":"ci-password"}')
+            original = folder / "not-selected.csv"
+            original.write_text("ci-password")
+            sanitize(root, "ci-password")
+            self.assertNotIn("ci-password", report.read_text())
+            self.assertEqual(original.read_text(), "ci-password")
+            self.assertTrue((root / "sanitized.ok").is_file())
+
     def test_benchmark_json_is_sanitized_before_upload(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
