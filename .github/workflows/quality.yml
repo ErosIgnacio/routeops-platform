@@ -72,6 +72,8 @@ jobs:
       - run: mkdir -p .ci-artifacts
       - run: npm ci --ignore-scripts
         working-directory: frontend
+      - name: Solver HTTP boundary contracts
+        run: node --test infrastructure/vroom/request-guard.test.cjs
       - run: npm test -- --reporter=default --reporter=junit --outputFile=../.ci-artifacts/frontend.xml
         working-directory: frontend
       - run: python3 scripts/ci/check_junit.py .ci-artifacts/frontend.xml

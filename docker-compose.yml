@@ -51,7 +51,8 @@ services:
     restart: unless-stopped
 
   vroom:
-    image: ghcr.io/vroom-project/vroom-docker:v1.15.0@sha256:247d5683d6745c755d718a156d16b16aac80baccc276a003a68b986c13883b08
+    build:
+      context: ./infrastructure/vroom
     environment:
       VROOM_ROUTER: osrm
       VROOM_LOG: /tmp

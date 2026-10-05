@@ -140,6 +140,48 @@ def test_xml_entities_rejected_in_metadata_and_incremental_stream(encoding):
         _xml_root(archive, "metadata.xml", 10000)
 
 
+@pytest.mark.parametrize("encoding", ["utf-16-le", "utf-16-be"])
+@pytest.mark.parametrize("bom", [True, False])
+@pytest.mark.parametrize("invalid", ["\ud800A", "\udc00", "\ud800"])
+def test_malformed_utf16_is_rejected_before_xml_parser(encoding, bom, invalid):
+    declaration = '<?xml version="1.0" encoding="UTF-16"?>'
+    prefix = (b"\xff\xfe" if encoding.endswith("le") else b"\xfe\xff") if bom else b""
+    xml = prefix + (declaration + "<data>" + invalid + "</data>").encode(
+        encoding, errors="surrogatepass"
+    )
+    checked = _CheckedXmlStream(io.BytesIO(xml))
+    with pytest.raises(ValueError, match="XLSX_INVALID"):
+        while checked.read(3):
+            pass
+    target = io.BytesIO()
+    with zipfile.ZipFile(target, "w") as output:
+        output.writestr("metadata.xml", xml)
+    with (
+        zipfile.ZipFile(io.BytesIO(target.getvalue())) as archive,
+        pytest.raises(ValueError, match="XLSX_INVALID"),
+    ):
+        _xml_root(archive, "metadata.xml", 10000)
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "utf-16", "utf-16-be", "utf-16-le"])
+def test_valid_xml_unicode_and_split_surrogate_pairs_preserved(encoding):
+    declaration = f'<?xml version="1.0" encoding="{encoding}"?>'
+    xml = (declaration + "<data>0007 &amp; café 😀</data>").encode(encoding)
+    checked = _CheckedXmlStream(io.BytesIO(xml))
+    chunks = []
+    while chunk := checked.read(3):
+        chunks.append(chunk)
+    assert b"".join(chunks) == xml
+
+
+@pytest.mark.parametrize("suffix", [b"\x00", b"\x00\xd8"])
+def test_truncated_utf16_stream_rejected_at_eof(suffix):
+    checked = _CheckedXmlStream(io.BytesIO("<data/>".encode("utf-16") + suffix))
+    checked.read()
+    with pytest.raises(ValueError, match="XLSX_INVALID"):
+        checked.read()
+
+
 def test_logs_preserve_exception_type_and_frames_without_values_or_local_paths():
     try:
         raise ValueError("password=private-token SELECT customer-address")

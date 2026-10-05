@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import codecs
 import csv
 import io
 import os
@@ -540,9 +541,41 @@ class _CheckedXmlStream:
     def __init__(self, stream: IO[bytes]) -> None:
         self.stream = stream
         self.tail = b""
+        self.prefix = b""
+        self.decoder: codecs.IncrementalDecoder | None = None
+        self.encoding_checked = False
 
     def read(self, size: int = -1) -> bytes:
         chunk = self.stream.read(size)
+        # Expat's vendored UTF-16 parser may accept malformed surrogate pairs
+        # (CVE-2026-93990). Validate before passing any such input to Expat.
+        if not self.encoding_checked:
+            self.prefix += chunk
+            if len(self.prefix) >= 4 or not chunk:
+                self.encoding_checked = True
+                signatures = (
+                    (b"\xff\xfe\x00\x00", "utf-32"),
+                    (b"\x00\x00\xfe\xff", "utf-32"),
+                    (b"\xff\xfe", "utf-16"),
+                    (b"\xfe\xff", "utf-16"),
+                    (b"\x00<\x00?", "utf-16-be"),
+                    (b"<\x00?\x00", "utf-16-le"),
+                )
+                for signature, encoding in signatures:
+                    if self.prefix.startswith(signature):
+                        self.decoder = codecs.getincrementaldecoder(encoding)(errors="strict")
+                        break
+                checked = self.prefix
+                self.prefix = b""
+            else:
+                checked = b""
+        else:
+            checked = chunk
+        if self.decoder is not None:
+            try:
+                self.decoder.decode(checked, final=not chunk)
+            except UnicodeDecodeError as exc:
+                raise ValueError("XLSX_INVALID") from exc
         # Null-separated UTF-16/32 must not bypass the DTD/entity guard.
         sample = (self.tail + chunk).replace(b"\x00", b"").upper()
         if b"<!DOCTYPE" in sample or b"<!ENTITY" in sample:
@@ -563,9 +596,9 @@ def _xml_root(archive: zipfile.ZipFile, path: str, max_bytes: int) -> ET.Element
     if archive.getinfo(path).file_size > max_bytes:
         raise ValueError("XLSX_EXPANSION_LIMIT")
     payload = archive.read(path)
-    normalized = payload.replace(b"\x00", b"").upper()
-    if b"<!DOCTYPE" in normalized or b"<!ENTITY" in normalized:
-        raise ValueError("XLSX_INVALID")
+    checked = _CheckedXmlStream(io.BytesIO(payload))
+    checked.read()
+    checked.read()  # Finalize decoding, including a truncated code unit/pair.
     return ET.fromstring(payload)
 
 
