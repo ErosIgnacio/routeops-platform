@@ -35,8 +35,8 @@ jobs:
       - name: Format, lint and strict typing
         working-directory: backend
         run: |
-          ruff format --check src tests migrations ../scripts/ci ../scripts/security scripts/benchmark_acceptance.py scripts/benchmark_http_flow.py
-          ruff check src tests migrations ../scripts/ci ../scripts/security scripts/benchmark_acceptance.py scripts/benchmark_http_flow.py
+          ruff format --check src tests migrations ../scripts/ci ../scripts/security ../scripts/review scripts/benchmark_acceptance.py scripts/benchmark_http_flow.py
+          ruff check src tests migrations ../scripts/ci ../scripts/security ../scripts/review scripts/benchmark_acceptance.py scripts/benchmark_http_flow.py
           mypy src
       - name: Python dependency advisory snapshot
         run: python scripts/security/audit_dependencies.py --output .ci-artifacts/dependency-python.json
@@ -44,6 +44,7 @@ jobs:
         run: |
           mkdir -p .ci-artifacts
           python -m unittest discover -s scripts/ci -p 'test_*.py' -v
+          python -m unittest discover -s scripts/review -p 'test_*.py' -v
           cd backend
           pytest -m 'not integration' --junitxml=../.ci-artifacts/unit.xml --cov=routeops --cov-report=xml:../.ci-artifacts/coverage.xml
           python ../scripts/ci/check_junit.py ../.ci-artifacts/unit.xml
