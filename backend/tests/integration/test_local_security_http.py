@@ -9,6 +9,26 @@ import pytest
 pytestmark = pytest.mark.integration
 
 
+def test_solver_wrapper_guards_real_http_before_express_or_solver():
+    base = os.getenv("ROUTEOPS_TEST_VROOM_URL", "http://127.0.0.1:3000")
+    with httpx.Client(base_url=base, timeout=20) as client:
+        assert client.get("/health").status_code == 200
+        for headers, code in (
+            ({"Origin": "https://foreign.example"}, "ORIGIN_NOT_ALLOWED"),
+            ({"Origin": "null"}, "ORIGIN_NOT_ALLOWED"),
+            ({"Host": "rebound.example"}, "HOST_NOT_ALLOWED"),
+            ({"Sec-Fetch-Site": "cross-site"}, "ORIGIN_NOT_ALLOWED"),
+        ):
+            result = client.post("/", json={}, headers=headers)
+            assert result.status_code in (400, 403) and result.json()["code"] == code
+        form = client.post("/", data={"x[y]": "untrusted"})
+        assert form.status_code == 415 and form.json()["code"] == "JSON_REQUIRED"
+        query = client.get("/health?x[y]=untrusted")
+        assert query.status_code == 400 and query.json()["code"] == "REQUEST_NOT_SUPPORTED"
+        # Rejections did not crash the wrapper or invoke an unavailable router.
+        assert client.get("/health").status_code == 200
+
+
 def test_browser_write_boundary_and_body_limit_before_database_side_effects():
     base = os.getenv("ROUTEOPS_INTEGRATION_BASE_URL")
     if not base:

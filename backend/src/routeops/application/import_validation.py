@@ -556,10 +556,12 @@ class _CheckedXmlStream:
                 signatures = (
                     (b"\xff\xfe\x00\x00", "utf-32"),
                     (b"\x00\x00\xfe\xff", "utf-32"),
+                    (b"\x00\x00\x00<", "utf-32-be"),
+                    (b"<\x00\x00\x00", "utf-32-le"),
                     (b"\xff\xfe", "utf-16"),
                     (b"\xfe\xff", "utf-16"),
-                    (b"\x00<\x00?", "utf-16-be"),
-                    (b"<\x00?\x00", "utf-16-le"),
+                    (b"\x00<", "utf-16-be"),
+                    (b"<\x00", "utf-16-le"),
                 )
                 for signature, encoding in signatures:
                     if self.prefix.startswith(signature):

@@ -142,9 +142,9 @@ def test_xml_entities_rejected_in_metadata_and_incremental_stream(encoding):
 
 @pytest.mark.parametrize("encoding", ["utf-16-le", "utf-16-be"])
 @pytest.mark.parametrize("bom", [True, False])
+@pytest.mark.parametrize("declaration", ['<?xml version="1.0" encoding="UTF-16"?>', ""])
 @pytest.mark.parametrize("invalid", ["\ud800A", "\udc00", "\ud800"])
-def test_malformed_utf16_is_rejected_before_xml_parser(encoding, bom, invalid):
-    declaration = '<?xml version="1.0" encoding="UTF-16"?>'
+def test_malformed_utf16_is_rejected_before_xml_parser(encoding, bom, declaration, invalid):
     prefix = (b"\xff\xfe" if encoding.endswith("le") else b"\xfe\xff") if bom else b""
     xml = prefix + (declaration + "<data>" + invalid + "</data>").encode(
         encoding, errors="surrogatepass"
