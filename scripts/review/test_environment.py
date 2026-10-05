@@ -33,9 +33,7 @@ class OwnershipGuards(unittest.TestCase):
 
     def test_missing_ownership_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
-            self.invoke(
-                Path(directory), ["stop", "--project", "routeops-review-missing"]
-            )
+            self.invoke(Path(directory), ["stop", "--project", "routeops-review-missing"])
 
     def test_reset_requires_exact_confirmation(self):
         with tempfile.TemporaryDirectory() as directory:

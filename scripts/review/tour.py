@@ -77,13 +77,11 @@ def main() -> None:
             if api(path) != expected:
                 raise RuntimeError(f"Restored/restarted resource differs: {path}")
         for artifact in report["exports"]:
-            if (
-                hashlib.sha256(request(base, artifact["path"])).hexdigest()
-                != artifact["sha256"]
-            ):
+            if hashlib.sha256(request(base, artifact["path"])).hexdigest() != artifact["sha256"]:
                 raise RuntimeError("Export changed across backup/restart")
         print(
-            f"Verified {len(report['readback'])} exact API resources and {len(report['exports'])} export hashes; no writes"
+            f"Verified {len(report['readback'])} exact API resources and "
+            f"{len(report['exports'])} export hashes; no writes"
         )
         return
     if args.model is None or args.package is None or args.output is None:
@@ -102,7 +100,10 @@ def main() -> None:
     parts = []
     for file in files:
         parts.append(
-            f'--{boundary}\r\nContent-Disposition: form-data; name="files"; filename="{file.name}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode()
+            (
+                f'--{boundary}\r\nContent-Disposition: form-data; name="files"; '
+                f'filename="{file.name}"\r\nContent-Type: application/octet-stream\r\n\r\n'
+            ).encode()
             + file.read_bytes()
             + b"\r\n"
         )
@@ -112,9 +113,7 @@ def main() -> None:
         "Content-Type": f"multipart/form-data; boundary={boundary}",
         "Idempotency-Key": key,
     }
-    batch = json.loads(request(base, prefix + "/imports", content, upload_headers))[
-        "id"
-    ]
+    batch = json.loads(request(base, prefix + "/imports", content, upload_headers))["id"]
     duplicate = json.loads(request(base, prefix + "/imports", content, upload_headers))
     assert duplicate["id"] == batch
     import_path = f"{prefix}/imports/{batch}"
@@ -124,8 +123,7 @@ def main() -> None:
     revision = api(import_path + "/publish", {})
     assert api(import_path + "/publish", {})["id"] == revision["id"]
     orders = [
-        f"{args.model.upper()}-{number:03d}"
-        for number in range(1, 5 if args.model == "b2b" else 7)
+        f"{args.model.upper()}-{number:03d}" for number in range(1, 5 if args.model == "b2b" else 7)
     ]
     size = len(orders) // 2
     manual = [
@@ -136,9 +134,9 @@ def main() -> None:
         }
         for index in range(2)
     ]
-    comparison = api(
-        prefix + "/revisions/1/comparisons", {"manual_routes": manual}, uuid4().hex
-    )["comparison_id"]
+    comparison = api(prefix + "/revisions/1/comparisons", {"manual_routes": manual}, uuid4().hex)[
+        "comparison_id"
+    ]
     compared = wait(f"/api/v1/comparisons/{comparison}", {"READY", "FAILED"})
     assert compared["status"] == "READY", compared
     snapshots = {"validation_before_publication": validated, "comparison": compared}
@@ -153,19 +151,13 @@ def main() -> None:
         routes = ready["result"]["routes"]
         assert len(routes) == 2, routes
         routed = {
-            step["order_id"]
-            for route in routes
-            for step in route["steps"]
-            if step.get("order_id")
+            step["order_id"] for route in routes for step in route["steps"] if step.get("order_id")
         }
         assert routed == set(orders), routed
         snapshots[action + "_ready"] = ready
         final = api(f"/api/v1/revision-runs/{run}/{action}", {})
         assert final["status"] == ("ACCEPTED" if action == "accept" else "CANCELED")
-        assert (
-            api(f"/api/v1/revision-runs/{run}/{action}", {})["status"]
-            == final["status"]
-        )
+        assert api(f"/api/v1/revision-runs/{run}/{action}", {})["status"] == final["status"]
         runs[action] = run
         snapshots[action + "_final"] = final
     readback = {
@@ -183,9 +175,7 @@ def main() -> None:
         for format_name in ("csv", "xlsx"):
             export_path = path + "/exports/" + format_name
             data = request(base, export_path)
-            filename = f"{resource}-{identity}." + (
-                "zip" if format_name == "csv" else "xlsx"
-            )
+            filename = f"{resource}-{identity}." + ("zip" if format_name == "csv" else "xlsx")
             (args.output / filename).write_bytes(data)
             exports.append(
                 {

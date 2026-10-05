@@ -7,5 +7,8 @@ FROM ghcr.io/vroom-project/vroom-docker:v1.15.0@sha256:247d5683d6745c755d718a156
 # Replace only the unsupported Node 20 executable; npm and wrapper dependencies
 # remain inventoried, including their outstanding advisories.
 COPY --from=node_runtime /usr/local/bin/node /usr/local/bin/node
+# Retain the matching runtime's MIT and bundled third-party notices. The base
+# image still carries its original Node 20 notices separately.
+COPY --from=node_runtime /usr/local/LICENSE /routeops/licenses/node-24-LICENSE
 COPY request-guard.cjs /routeops/request-guard.cjs
 ENV NODE_OPTIONS="--require=/routeops/request-guard.cjs"

@@ -34,9 +34,7 @@ def digest(path: Path) -> str:
 
 def command(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
     # Failure messages omit subprocess output, which may include configuration.
-    result = subprocess.run(
-        args, cwd=ROOT, stderr=subprocess.PIPE, check=False, **kwargs
-    )
+    result = subprocess.run(args, cwd=ROOT, stderr=subprocess.PIPE, check=False, **kwargs)
     if result.returncode:
         raise RuntimeError(
             f"Command failed (exit {result.returncode}); inspect this review project privately"
@@ -101,9 +99,7 @@ def main() -> None:
             stdout=subprocess.PIPE,
         )
         if existing.stdout.strip() or volumes.stdout.strip():
-            parser.error(
-                "Project already has Docker resources; choose a new project identity"
-            )
+            parser.error("Project already has Docker resources; choose a new project identity")
         state.mkdir(parents=True, mode=0o700)
         password = secrets.token_hex(24)
         env.write_text(
@@ -127,9 +123,7 @@ def main() -> None:
             ROOT / "infrastructure/ci/osm-archive.json",
             ROOT / ".ci-work/osrm/santiago-demo.osm",
         )
-        print(
-            "Private review configuration created; exact OSM archive and source verified"
-        )
+        print("Private review configuration created; exact OSM archive and source verified")
         return
     if (
         not marker.is_file()
@@ -153,24 +147,20 @@ def main() -> None:
     if any(key.startswith(("ROUTEOPS_", "POSTGRES_", "REVIEW_")) for key in os.environ):
         parser.error("Unset inherited ROUTEOPS_*, POSTGRES_* and REVIEW_* variables")
     if args.action == "up":
-        command(compose + ["config", "--quiet"])
-        command(compose + ["--profile", "tools", "run", "--rm", "osrm-prepare"])
-        command(compose + ["up", "-d", "--build"])
+        command([*compose, "config", "--quiet"])
+        command([*compose, "--profile", "tools", "run", "--rm", "osrm-prepare"])
+        command([*compose, "up", "-d", "--build"])
     elif args.action == "status":
-        command(compose + ["ps", "-a"])
+        command([*compose, "ps", "-a"])
     elif args.action == "stop":
-        command(compose + ["stop"])
+        command([*compose, "stop"])
     elif args.action == "restart":
-        command(compose + ["restart"])
+        command([*compose, "restart"])
     elif args.action == "reset":
         if args.confirm_project != args.project:
-            parser.error(
-                "Destructive synthetic reset requires --confirm-project with the exact owned project"
-            )
-        command(compose + ["down", "--volumes"])
-        print(
-            "Only the explicit owned review project containers/network/two volumes were removed"
-        )
+            parser.error("Synthetic reset requires --confirm-project with the exact owned project")
+        command([*compose, "down", "--volumes"])
+        print("Only the explicit owned review project containers/network/two volumes were removed")
     elif args.action in ("backup", "restore"):
         if args.backup_dir is None:
             parser.error(
@@ -185,19 +175,19 @@ def main() -> None:
             directory.mkdir(parents=True, mode=0o700)
             running = (
                 command(
-                    compose + ["ps", "--status", "running", "--services"],
+                    [*compose, "ps", "--status", "running", "--services"],
                     stdout=subprocess.PIPE,
                 )
                 .stdout.decode()
                 .splitlines()
             )
             resume = [name for name in WRITERS if name in running]
-            command(compose + ["stop", *WRITERS])
             try:
+                command([*compose, "stop", *WRITERS])
                 with (directory / "database.dump").open("xb") as output:
                     command(
-                        compose
-                        + [
+                        [
+                            *compose,
                             "exec",
                             "-T",
                             "database",
@@ -208,11 +198,14 @@ def main() -> None:
                         stdout=output,
                     )
                 # Backend is stopped: one-off process reads the same private named volume.
-                code = "import sys,tarfile; t=tarfile.open(fileobj=sys.stdout.buffer,mode='w|'); t.add('/app/private-imports',arcname='objects'); t.close()"
+                code = (
+                    "import sys,tarfile; t=tarfile.open(fileobj=sys.stdout.buffer,mode='w|'); "
+                    "t.add('/app/private-imports',arcname='objects'); t.close()"
+                )
                 with (directory / "originals.tar").open("xb") as output:
                     command(
-                        compose
-                        + [
+                        [
+                            *compose,
                             "run",
                             "--rm",
                             "--no-deps",
@@ -238,81 +231,75 @@ def main() -> None:
                 (directory / "manifest.json").write_text(
                     json.dumps(manifest, indent=2), encoding="utf-8"
                 )
-                print(
-                    "Coherent private PostgreSQL + original-object backup completed and hashed"
-                )
+                print("Coherent private PostgreSQL + original-object backup completed and hashed")
             finally:
                 if resume:
-                    command(compose + ["start", *resume])
+                    command([*compose, "start", *resume])
         else:
-            manifest = json.loads(
-                (directory / "manifest.json").read_text(encoding="utf-8")
-            )
-            if (
-                manifest["source_project"] == args.project
-                or args.confirm_project != args.project
-            ):
+            manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+            if manifest["source_project"] == args.project or args.confirm_project != args.project:
                 parser.error(
                     "Restore requires a different owned EMPTY project and exact confirmation"
                 )
             for name in ("database.dump", "originals.tar"):
                 if (
                     digest(directory / name) != manifest["files"][name]["sha256"]
-                    or (directory / name).stat().st_size
-                    != manifest["files"][name]["bytes"]
+                    or (directory / name).stat().st_size != manifest["files"][name]["bytes"]
                 ):
                     parser.error(
                         "Backup hash/size mismatch; restore refused before database writes"
                     )
-            command(compose + ["up", "-d", "--wait", "database"])
+            command([*compose, "up", "-d", "--wait", "database"])
             check = command(
-                compose
-                + [
+                [
+                    *compose,
                     "exec",
                     "-T",
                     "database",
                     "sh",
                     "-ec",
-                    "psql -At -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -c \"SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name<>'spatial_ref_sys'\"",
+                    'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c '
+                    '"SELECT count(*) FROM information_schema.tables '
+                    "WHERE table_schema='public' AND table_type='BASE TABLE' "
+                    "AND table_name<>'spatial_ref_sys'\"",
                 ],
                 stdout=subprocess.PIPE,
             )
             if check.stdout.strip() != b"0":
                 parser.error("Restore target is not empty; existing history preserved")
             # Private target volume must also be empty. Restore members cannot escape its root.
-            code = "import sys,tarfile,pathlib; p=pathlib.Path('/app/private-imports'); assert not any(p.iterdir()), 'target objects not empty'; t=tarfile.open(fileobj=sys.stdin.buffer,mode='r|');\nfor m in t:\n assert m.name=='objects' or m.name.startswith('objects/'); assert not m.issym() and not m.islnk() and '..' not in pathlib.PurePosixPath(m.name).parts; m.name=m.name.removeprefix('objects/'); m.name='.' if m.name=='objects' else m.name; t.extract(m,p,filter='data')"
+            code = (
+                "import sys,tarfile,pathlib; p=pathlib.Path('/app/private-imports'); "
+                "assert not any(p.iterdir()), 'target objects not empty'; "
+                "t=tarfile.open(fileobj=sys.stdin.buffer,mode='r|');\n"
+                "for m in t:\n"
+                " assert m.name=='objects' or m.name.startswith('objects/'); "
+                "assert not m.issym() and not m.islnk() "
+                "and '..' not in pathlib.PurePosixPath(m.name).parts; "
+                "m.name=m.name.removeprefix('objects/'); "
+                "m.name='.' if m.name=='objects' else m.name; t.extract(m,p,filter='data')"
+            )
             with (directory / "originals.tar").open("rb") as input_file:
                 command(
-                    compose
-                    + [
-                        "run",
-                        "--rm",
-                        "--no-deps",
-                        "-T",
-                        "backend",
-                        "python",
-                        "-c",
-                        code,
-                    ],
+                    [*compose, "run", "--rm", "--no-deps", "-T", "backend", "python", "-c", code],
                     stdin=input_file,
                     stdout=subprocess.PIPE,
                 )
             with (directory / "database.dump").open("rb") as input_file:
                 command(
-                    compose
-                    + [
+                    [
+                        *compose,
                         "exec",
                         "-T",
                         "database",
                         "sh",
                         "-ec",
-                        'pg_restore --clean --if-exists --no-owner --no-acl --exit-on-error -U "$POSTGRES_USER" -d "$POSTGRES_DB"',
+                        "pg_restore --clean --if-exists --no-owner --no-acl --exit-on-error "
+                        '-U "$POSTGRES_USER" -d "$POSTGRES_DB"',
                     ],
                     stdin=input_file,
                 )
-            print(
-                "Restore completed in the distinct empty project; now start services and verify provenance/history"
-            )
+            print("Restore completed; start the empty target project and verify history/provenance")
 
 
 if __name__ == "__main__":
