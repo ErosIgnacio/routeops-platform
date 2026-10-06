@@ -14,7 +14,9 @@ orders, stock and business identifiers are synthetic.
 > [Acceptance and evidence](docs/milestone-3-final-review.md) distinguish browser,
 > API, automated and independent-reader checks. Delivery 4.1 (quality/CI) was
 > closed and published on 2026-10-04. Delivery 4.2 (performance/basic security) is
-> technically accepted for local single-user use; 4.3 remains pending.
+> closed and published for local single-user use. Delivery 4.3 implements the
+> runbooks and portfolio tours and is **pending review** on its branch;
+> `v0.4.0` has not been created.
 
 ![Original Santiago demo: two routes from separate centers](docs/images/original-routes.jpg)
 
@@ -50,6 +52,8 @@ capacities, skills, windows and limits come from the dataset.
 | `b2c-feasible` | Six parcel deliveries, shared coordinates, KPIs and comparison. |
 | `b2c-task-pressure` | Six orders against a two-task limit; individual omission causes remain inferred. |
 | `b2c-distance-inferred` | Tight distance/driving limits without attributing a proven individual cause. |
+| Portfolio B2B | Four deliveries, two trucks/two CDs, weight, cold skills and service. |
+| Portfolio B2C | Six distinct destinations, two vans, windows and task caps. |
 
 The original `ORD-003` regression remains: it needs 20 units of `SKU-C`, but each
 CD has only five available after safety stock. `STOCK_NO_FULL_COVERAGE` is intentional.
@@ -58,6 +62,12 @@ CD has only five available after safety stock. `STOCK_NO_FULL_COVERAGE` is inten
 
 These are real browser captures of synthetic local scenarios. Extensive evidence
 stays outside the repository. See [final review coverage](docs/milestone-3-final-review.md).
+
+![Portfolio B2B: two trucks from two centers](docs/images/portfolio-b2b.jpg)
+
+The new [portfolio tour](docs/portfolio-tour.md) uses isolated scenarios. Its
+[candidate report](docs/milestone-4-3-portfolio.md) separates API, browser,
+independent-reader and automated evidence.
 
 ## Architecture and stack
 
@@ -88,26 +98,30 @@ boundary limitation is recorded in the [architecture](docs/architecture.md).
 
 ## Quick start
 
-Prerequisites: Docker Engine with Compose v2; on Windows, Docker Desktop with
-Linux containers and PowerShell 7. The pinned database image targets
-`linux/amd64`. Use a trusted local development machine.
+Prerequisites: Docker Engine/Desktop with Linux containers, Compose >=2.24.4
+and Python 3.14.7. Windows examples use PowerShell; database targets
+`linux/amd64`. See [Windows/WSL2/Linux operations](docs/local-runbook.md)
+for an isolated clean checkout and paired backup/restore.
 
 From the repository root:
 
 ```powershell
+# New installation only; never overwrite an existing .env:
 Copy-Item .env.example .env
 # Edit .env: choose POSTGRES_PASSWORD and set ROUTEOPS_DATABASE_URL with
 # the same password, URL-encoding reserved characters. The database host
 # inside Compose is database:5432.
-./infrastructure/osrm/download-osm.ps1
+python scripts/ci/prepare_map.py --destination data/osrm/santiago-demo.osm
 docker compose --profile tools run --rm osrm-prepare
-docker compose up --build
+docker compose up -d --build
+Invoke-RestMethod http://127.0.0.1:8000/health/ready
 ```
 
 Keep `.env` private and untracked. The template contains no database password;
 Compose rejects missing required values. Downloaded OSM/OSRM artifacts are
-ignored. Review a new download checksum against
-[source-lock.json](data/osrm/source-lock.json) before preprocessing.
+ignored. The tracked gzip restores the exact accepted source after checking
+packed/expanded hashes against [source-lock.json](data/osrm/source-lock.json).
+Download scripts are for deliberate dataset refresh, not exact reproduction.
 
 | Workspace | Local URL |
 |---|---|
@@ -144,18 +158,20 @@ Do not add `--volumes` when retaining data.
    and download persisted facts. Departure times and waiting affect deltas;
    a cheaper incomplete plan is not declared a winner.
 
-Generate a reproducible B2C input outside the repository:
+Generate the new two-vehicle portfolio input outside the repository:
 
 ```powershell
-docker compose exec backend python -m routeops.infrastructure.data.operation_cases --case b2c-feasible --format xlsx --output /tmp/routeops-b2c-demo
+docker compose exec backend python -m routeops.infrastructure.data.portfolio_cases --model b2c --format xlsx --output /tmp/routeops-b2c-demo
 docker compose cp backend:/tmp/routeops-b2c-demo ../routeops-b2c-demo
 ```
 
 The output directory must be empty; existing files are preserved. Upload the
 workbook with date **2026-10-15**, horizon **08:00–18:00**, zone
 **America/Santiago**, offset **−03:00** and currency **CLP**. The generator also
-supports `--format csv` and every case above. See [case definitions](docs/milestone-3-1c-diagnostics.md)
-for the API preparation alternative.
+supports `--model b2b --format csv`. Upload only the five CSV or workbook, not
+`context.json`. See [the tour](docs/portfolio-tour.md) for exact manual sequences,
+API commands and expected outcomes. Historical cases retain their separate
+`operation_cases` generator and [definitions](docs/milestone-3-1c-diagnostics.md).
 
 ## Tests and evidence
 
@@ -171,6 +187,14 @@ Three identified local check resources await cleanup after a recorded policy
 rejection; this does not condition the authorized technical closure.
 Its execution status and downloadable reports are available in
 [GitHub Actions](https://github.com/ErosIgnacio/routeops-platform/actions/workflows/quality.yml).
+
+The 4.3 functional commit `9b1c889` passed [CI 37391351227](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37391351227):
+264 unit + 121 integration backend tests, 36 frontend tests, nine CI-tool,
+four review safeguards and three Node boundary contracts, plus real smoke and
+both new portfolio tours. A BuildKit EOF before integration was resolved by
+retrying only the failed job. Final documentation commit CI is recorded in
+the external candidate manifest. Previous benchmark measurements retain their
+original commit/runtime provenance; 4.3 adds no capacity benchmark.
 
 For unit/static checks with Python 3.14 and Node 24:
 
@@ -207,6 +231,9 @@ Host execution uses loopback service addresses; Compose uses service names.
 | Analytics, UI and safe exports | [3.3](docs/milestone-3-3-analytics-exports.md) |
 | Final coverage and acceptance | [Hito 3 acceptance](docs/milestone-3-final-review.md) |
 | Previous published acceptance | [Hito 2](docs/milestone-2-6-acceptance.md), [v0.2.1](docs/v0.2.1-routing-ui.md) |
+| Install, operate and restore | [Windows/WSL2/Linux](docs/local-runbook.md), [API](docs/api.md) |
+| Portfolio and closure | [Tour](docs/portfolio-tour.md), [4.3 report](docs/milestone-4-3-portfolio.md), [checklist](docs/milestone-4-closure-checklist.md) |
+| Third-party terms | [Notices](THIRD_PARTY_NOTICES.md), [inventory](docs/research/m43-license-inventory.json) |
 | Remaining work | [Roadmap](docs/roadmap.md) |
 
 ## Current limits and Milestone 4

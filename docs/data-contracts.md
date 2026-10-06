@@ -1,5 +1,11 @@
 # Input data contract v1
 
+The [portfolio generator/tour](portfolio-tour.md) uses the implemented version
+2.2 optional-column contract with new synthetic inputs, not a new schema or
+business model. B2B/B2C labels add no implicit restrictions. `context.json` is
+setup guidance and is not part of the five-CSV/one-XLSX upload. Current endpoint
+paths are in [the API reference](api.md).
+
 ## Package rules
 
 RouteOps accepts either five CSV files or one `.xlsx` workbook with worksheets

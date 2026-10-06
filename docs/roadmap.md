@@ -268,8 +268,15 @@ Approved deliveries:
    branch CI followed by fast-forward publication to main and its automatic CI;
    no manual full-suite or benchmark rerun is required for documentation alone.
    Keep branches 4.1 and 4.2 until Milestone 4 closes; no new tag is authorized.
-3. **4.3 — documentation, reproduction and portfolio presentation:** final
-   runbooks, backup/reset guidance, third-party review and presentation. Not started.
+3. **4.3 — documentation, reproduction and portfolio presentation:** implemented,
+   pending review on `feat/m4-3-portfolio-preparation`: clean remote checkout,
+   owned Compose projects, exact map/locks, paired SQL/private-original restore,
+   restart readback, new B2B/B2C browser/API tours, exports and license inventory.
+   See [candidate report](milestone-4-3-portfolio.md), [operations](local-runbook.md),
+   [tour](portfolio-tour.md) and [closure checklist](milestone-4-closure-checklist.md).
+   WSL shell instructions were reviewed; Windows Docker/Linux CI were executed.
+   No capacity expansion or new benchmark; 4.2 residual advisories remain explicit.
+   Main/prior tags stay unchanged; `v0.4.0` requires later acceptance.
 
 Deliverables:
 

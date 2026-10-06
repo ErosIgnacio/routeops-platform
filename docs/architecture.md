@@ -188,6 +188,9 @@ not a list of files that still need to be created. In 3.1a a read-only
 
 ## Principal API resources (initial resource boundaries)
 
+This list is historical design. Use [the implemented API reference](api.md)
+and runtime OpenAPI for current paths and schemas.
+
 - `POST /api/v1/scenarios`
 - `POST /api/v1/scenarios/{id}/imports`
 - `GET /api/v1/scenarios/{id}/validation-issues`
@@ -239,3 +242,13 @@ reads this document only; it performs no routing, repricing or inventory writes.
   stored for audit. Raw vendor payload retention remains an initial proposal,
   not implemented storage; provider JSON does not leak into domain DTOs.
 - Health endpoints distinguish process liveness from dependency readiness.
+
+## Local reproduction and recovery
+
+[The operations runbook](local-runbook.md) separates operational history from
+owned synthetic review projects. SQL metadata and private originals are backed
+up as a quiesced pair; restore verifies both hashes into an empty target. It is
+not a cross-resource atomic restore. Restarting services does not reset data.
+[Portfolio inputs](portfolio-tour.md) retain existing contracts, allocation
+policies, `SolverGateway`, routing source and workload limits. No authentication
+or public deployment is introduced.
