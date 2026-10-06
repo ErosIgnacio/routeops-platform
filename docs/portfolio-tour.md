@@ -5,7 +5,8 @@ policies. They use the existing CSV/XLSX contracts and `SolverGateway`. Keep the
 old demos, including `ORD-003` requiring 20 `SKU-C` units with only five available
 per CD and `STOCK_NO_FULL_COVERAGE`, intact.
 
-Start a [clean review environment](local-runbook.md). Use the exact project
+Start a [clean review environment from the `v0.4.0` tag](local-runbook.md).
+Use the exact project
 arguments below, substituting only your owned identity/paths if needed.
 
 ```sh

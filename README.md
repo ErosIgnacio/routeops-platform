@@ -14,9 +14,10 @@ orders, stock and business identifiers are synthetic.
 > [Acceptance and evidence](docs/milestone-3-final-review.md) distinguish browser,
 > API, automated and independent-reader checks. Delivery 4.1 (quality/CI) was
 > closed and published on 2026-10-04. Delivery 4.2 (performance/basic security) is
-> closed and published for local single-user use. Delivery 4.3 implements the
-> runbooks and portfolio tours and is **pending review** on its branch;
-> `v0.4.0` has not been created.
+> closed and published for local single-user use. Delivery 4.3 and Milestone 4
+> are technically accepted. **`v0.4.0`** is the authorized closure version for
+> quality CI, measured local performance/security and reproducible portfolio
+> tours. See the [closure checklist](docs/milestone-4-closure-checklist.md).
 
 ![Original Santiago demo: two routes from separate centers](docs/images/original-routes.jpg)
 
@@ -66,7 +67,7 @@ stays outside the repository. See [final review coverage](docs/milestone-3-final
 ![Portfolio B2B: two trucks from two centers](docs/images/portfolio-b2b.jpg)
 
 The new [portfolio tour](docs/portfolio-tour.md) uses isolated scenarios. Its
-[candidate report](docs/milestone-4-3-portfolio.md) separates API, browser,
+[accepted report](docs/milestone-4-3-portfolio.md) separates API, browser,
 independent-reader and automated evidence.
 
 ## Architecture and stack
@@ -101,7 +102,7 @@ boundary limitation is recorded in the [architecture](docs/architecture.md).
 Prerequisites: Docker Engine/Desktop with Linux containers, Compose >=2.24.4
 and Python 3.14.7. Windows examples use PowerShell; database targets
 `linux/amd64`. See [Windows/WSL2/Linux operations](docs/local-runbook.md)
-for an isolated clean checkout and paired backup/restore.
+for an isolated clean checkout of **`v0.4.0`** and paired backup/restore.
 
 From the repository root:
 
@@ -188,13 +189,16 @@ rejection; this does not condition the authorized technical closure.
 Its execution status and downloadable reports are available in
 [GitHub Actions](https://github.com/ErosIgnacio/routeops-platform/actions/workflows/quality.yml).
 
-The 4.3 functional commit `9b1c889` passed [CI 37391351227](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37391351227):
+The accepted 4.3 commit `e2cfe4a` passed [CI 37393123462](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37393123462):
 264 unit + 121 integration backend tests, 36 frontend tests, nine CI-tool,
 four review safeguards and three Node boundary contracts, plus real smoke and
-both new portfolio tours. A BuildKit EOF before integration was resolved by
-retrying only the failed job. Final documentation commit CI is recorded in
-the external candidate manifest. Previous benchmark measurements retain their
-original commit/runtime provenance; 4.3 adds no capacity benchmark.
+both new portfolio tours. The earlier functional CI `37391351227` required a
+retry of only the integration job after a BuildKit EOF before tests. The
+accepted commit's reports remain in the external evidence manifest. Closing
+documentation pushes run CI automatically on the branch and main; no local
+full-suite or benchmark rerun is needed for those edits. Previous benchmark
+measurements retain their original commit/runtime provenance; 4.3 adds no
+capacity benchmark.
 
 For unit/static checks with Python 3.14 and Node 24:
 
@@ -253,10 +257,12 @@ Host execution uses loopback service addresses; Compose uses service names.
   Independent readers were checked, not native Excel or every browser/device.
 - Frontend bundle and Starlette/httpx warnings remain documented.
 
-**Milestone 4:** quality/CI (4.1) is technically accepted. Reproducible performance
-and basic security (4.2) is technically accepted for local single-user use;
-final runbooks, backup/reset guidance
-and portfolio preparation (4.3) remain pending.
+**Milestone 4:** deliveries 4.1–4.3 are technically accepted, with authorized
+closure as `v0.4.0`. Quality CI, measured performance/basic security, runbooks,
+paired backup/reset guidance and portfolio tours retain the local single-user
+scope. Windows/Docker and Linux CI were executed; user WSL instructions were
+reviewed without an executed user-distro reproduction. SQL/private-file restore
+is not atomic across resources.
 No separate RouteEngine is introduced in this delivery.
 See [4.2 measurements and security boundaries](docs/milestone-4-2-performance-security.md).
 The [accepted image review](docs/milestone-4-2-image-security-review.md) records

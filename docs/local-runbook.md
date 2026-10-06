@@ -66,14 +66,16 @@ are on port 8000 at `/docs` and `/openapi.json`.
 
 ## Clean, isolated reviewer installation
 
-Clone the review branch into a fresh directory. The following Python commands
+After publication, clone the **`v0.4.0` tag** into a fresh directory. Git's
+detached HEAD at a release tag is expected for this read-only reproduction.
+The following Python commands
 work in PowerShell and Linux/WSL2 without changing execution policy. They never
 read the operational `.env`, named volumes, private originals or map indexes.
 Each project must have a **new** `routeops-review-*` identity; preparation rejects
 existing containers/volumes, and subsequent operations require its owner marker.
 
 ```sh
-git clone --single-branch --branch feat/m4-3-portfolio-preparation https://github.com/ErosIgnacio/routeops-platform.git routeops-review
+git clone --single-branch --branch v0.4.0 https://github.com/ErosIgnacio/routeops-platform.git routeops-review
 cd routeops-review
 python scripts/review/environment.py prepare --project routeops-review-demo
 python scripts/review/environment.py up --project routeops-review-demo
@@ -170,4 +172,4 @@ cannot silently adopt an unrelated installation. No `docker system prune`,
 global volume cleanup, or reattempt of the blocked 4.1 cleanup is authorized.
 
 Executed/reviewed distinctions and limitations are in
-[the candidate report](milestone-4-3-portfolio.md).
+[the accepted report](milestone-4-3-portfolio.md).

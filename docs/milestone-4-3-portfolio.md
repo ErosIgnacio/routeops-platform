@@ -1,7 +1,9 @@
-# Delivery 4.3 — reproduction and portfolio candidate
+# Delivery 4.3 — accepted reproduction and portfolio
 
-**Implemented, pending review. Not integrated into main or tagged.**
-Branch `feat/m4-3-portfolio-preparation`, from accepted 4.2 closure
+**Technically accepted by the user; Milestone 4 closure and `v0.4.0` publication
+authorized.** Approved candidate: `e2cfe4a2877442be9950d069f838199b1eff25ad`,
+[successful CI 37393123462](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37393123462).
+Developed on `feat/m4-3-portfolio-preparation`, from accepted 4.2 closure
 `260faf4a0a0bd4e16578c899fd9825315f66e179` (approved functional
 `fa02d7133bc2bb2f15027960f854eb16e27bcd37` is its ancestor).
 
@@ -57,11 +59,20 @@ was attempted. The tested pair precedes the additional browser-created scenarios
 
 ## Evidence and methods
 
-External candidate evidence:
+Preserved evidence of the accepted candidate:
 `C:\Users\erosi\Desktop\routeops-visual-review-v0.4.0`.
 `manifest.json`, `report.md`, independent-reader report and `SHA256SUMS.txt`
 relate files/resources/methods. One selected synthetic capture is versioned;
 previous evidence folders remain intact.
+
+The local closure review independently compared all 65 files against the
+manifest, verified all 64 SHA-256 entries (the inventory excludes itself),
+decoded every image and inspected the legibility of all 18 original captures.
+No discrepancy or missing file was found. This checks the saved evidence, not
+a new browser execution or an independent remote visual review. The accepted
+candidate bundle remains unchanged, including its historical candidate status.
+Reproduction now uses the `v0.4.0` tag, so removing integrated branches does not
+break the runbook.
 
 | Check | Result and provenance |
 |---|---|
@@ -94,9 +105,13 @@ CI `37391351227` passed 264 backend unit/36 frontend tests; first integration
 attempt failed in Docker BuildKit (`rpc … Unavailable … EOF`) before tests.
 Only its failed job was retried without weakening checks and passed: 121
 integrations, real smoke, B2B and B2C tours. Total backend: 385. Nine CI-tool,
-four review safeguard and three Node boundary contracts also passed. Final branch CI,
-recovered JUnit counts and real smoke/tour reports are in the final manifest;
-all jobs must pass before this delivery is presented as verified.
+four review safeguard and three Node boundary contracts also passed. The
+accepted `e2cfe4a` CI passed all three jobs; recovered JUnit counts and real
+smoke/tour reports are in the final manifest. Documentary closure changes no
+functional code. Branch and main pushes each run quality CI automatically;
+successful runs on the final closure commit and direct remote-reference checks
+are required before tagging, as specified in the closure checklist. Previous
+local suites and benchmark samples are preserved without routine repetition.
 
 4.2 residual advisories and trusted local single-user scope remain explicit.
 Historical benchmarks precede the runtime mitigations; no new capacity claims

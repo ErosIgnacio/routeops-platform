@@ -232,13 +232,16 @@ Acceptance criteria:
 
 ## Milestone 4 — portfolio quality
 
-Status: **4.1 closed and published on 2026-10-04**, documentary closure
+Status: **Deliveries 4.1–4.3 technically accepted; Milestone 4 closure authorized
+as `v0.4.0`.** Release gates are recorded in the
+[closure checklist](milestone-4-closure-checklist.md). 4.1 closed and published
+on 2026-10-04, documentary closure
 `3f4a7d6f24b7c174a76feadfff0fbf82db974958` in local/remote main and its branch at that closure;
 [CI 37242798198](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37242798198)
 passed automatically after the documentation-only push. Accepted functional commit
 `f7582f0dc9f936fe2b93da291df9d47016dd01d9`, from accepted Hito 3
 `c308bfb5224edf8268102cafd813faa8e9d5f206`. Documentary closure and fast-forward
-publication completed; no Milestone 4 tag is authorized. The three local
+publication completed. The three local
 check resources retained after `blocked by policy` do not condition closure.
 
 Approved deliveries:
@@ -267,23 +270,31 @@ Approved deliveries:
    precede these mitigations and the Node replacement. Documentary closure uses
    branch CI followed by fast-forward publication to main and its automatic CI;
    no manual full-suite or benchmark rerun is required for documentation alone.
-   Keep branches 4.1 and 4.2 until Milestone 4 closes; no new tag is authorized.
-3. **4.3 — documentation, reproduction and portfolio presentation:** implemented,
-   pending review on `feat/m4-3-portfolio-preparation`: clean remote checkout,
+   Branches were retained through acceptance; only fully integrated M4 branches
+   may be retired after verifying main, CI and the authorized release tag.
+3. **4.3 — documentation, reproduction and portfolio presentation:** technically
+   accepted at `e2cfe4a2877442be9950d069f838199b1eff25ad`,
+   [CI 37393123462](https://github.com/ErosIgnacio/routeops-platform/actions/runs/37393123462):
+   clean remote checkout,
    owned Compose projects, exact map/locks, paired SQL/private-original restore,
    restart readback, new B2B/B2C browser/API tours, exports and license inventory.
-   See [candidate report](milestone-4-3-portfolio.md), [operations](local-runbook.md),
+   See [accepted report](milestone-4-3-portfolio.md), [operations](local-runbook.md),
    [tour](portfolio-tour.md) and [closure checklist](milestone-4-closure-checklist.md).
    WSL shell instructions were reviewed; Windows Docker/Linux CI were executed.
    No capacity expansion or new benchmark; 4.2 residual advisories remain explicit.
-   Main/prior tags stay unchanged; `v0.4.0` requires later acceptance.
+   Closure verification found all 65 manifest files, 64 matching hashes and 18
+   readable captures in the preserved external evidence. This is a local saved-
+   evidence check, distinct from browser execution and remote code/CI review.
+   Reproduction uses `v0.4.0`; SQL/private-original restoration is not atomic.
+   Publication requires successful final branch/main CI and unchanged prior tags.
 
 Deliverables:
 
 - Test pyramid completion, deterministic benchmarks, upload/resource hardening,
   CI, architecture/data/API documentation, third-party notices, and demo assets.
 - Windows/WSL2 and Linux runbooks, backup/reset instructions for synthetic data,
-  and publication checklist. No publication is performed.
+  and publication checklist. Closure publication is authorized; public application
+  deployment, authentication and capacity expansion remain outside this milestone.
 
 Acceptance criteria:
 
